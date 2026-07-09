@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="light only" />
+<meta name="supported-color-schemes" content="light only" />
+<title>Handshake</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Lato:wght@400;700&display=swap');
+  body { margin:0; padding:0; }
+  a { color:#0152cb; }
+  @media (max-width:600px) { .card { padding:28px 22px !important; } }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#edf0f9;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;max-width:0;overflow:hidden;">Your one-time sign-in link for Handshake.</span>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#edf0f9;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;">
+          <tr>
+            <td align="center" style="padding:0 0 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="44" height="44" align="center" valign="middle" bgcolor="#0152cb" style="width:44px;height:44px;border-radius:10px;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Handshake"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg></td>
+                  <td width="10" style="width:10px;"></td>
+                  <td valign="middle" style="font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:21px;font-weight:800;letter-spacing:-0.02em;color:#111826;">Handshake</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="card" style="background:#f6f8fe;border:1px solid #d4dbe6;border-radius:14px;padding:40px;">
+              <h1 style="margin:0 0 14px;font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em;color:#111826;">Sign in to Handshake</h1>
+              <p style="margin:0 0 24px;font-family:'Lato',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#111826;">Click the button below to sign in to your Handshake account. No password needed.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#0152cb" style="border-radius:8px;"><a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:13px 26px;font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;line-height:1;color:#ffffff;text-decoration:none;border-radius:8px;">Sign in to Handshake</a></td></tr></table>
+              <p style="margin:28px 0 0;font-family:'Lato',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#6c727e;">Or copy and paste this link into your browser:<br /><a href="{{ .ConfirmationURL }}" target="_blank" style="color:#0152cb;word-break:break-all;">{{ .ConfirmationURL }}</a></p>
+              <p style="margin:24px 0 0;font-family:'Lato',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#6c727e;">If you didn&rsquo;t try to sign in, you can safely ignore this email.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:24px 8px 0;font-family:'Lato',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#6c727e;">
+              Handshake — your B2B outreach, in one place.<br />
+              This is an automated message; please don&rsquo;t reply.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
