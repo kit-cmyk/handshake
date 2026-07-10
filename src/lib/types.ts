@@ -242,6 +242,8 @@ export type ScrapeJob = {
   org_id: string;
   user_id: string | null;
   provider: string;
+  /** Whether the search was for businesses or people. */
+  kind: "companies" | "contacts";
   category: string;
   location: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -269,6 +271,32 @@ export type ImportBatch = {
   errors: { row: number; message: string }[] | null;
   created_by: string | null;
   created_at: string;
+};
+
+export type CrmSyncRun = {
+  id: string;
+  org_id: string;
+  user_id: string | null;
+  provider:
+    | "hubspot"
+    | "pipedrive"
+    | "salesforce"
+    | "zoho"
+    | "jobber"
+    | "housecall"
+    | "servicetitan"
+    | "quickbooks";
+  trigger: "manual" | "scheduled";
+  mode: "live" | "mock";
+  status: "pending" | "running" | "completed" | "failed";
+  fetched: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errored: number;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
 };
 
 // --- Inbox (conversations + two-way email threads) -------------------------

@@ -39,8 +39,8 @@ export default async function ProspectPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Find leads</h1>
         <p className="text-sm text-muted-foreground">
-          Search local businesses by industry, location, and conditions —
-          within a radius, on the map, straight into your CRM.
+          Search local businesses by industry and location, or find people by
+          role and company — reviewed and imported straight into your CRM.
         </p>
       </div>
 

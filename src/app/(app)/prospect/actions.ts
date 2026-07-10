@@ -8,6 +8,12 @@ import {
   type LatLng,
 } from "@/lib/places/provider";
 import { discoverEmail } from "@/lib/places/enrich";
+import {
+  getContactsProvider,
+  applyContactFilters,
+  contactPayload,
+  type ContactResult,
+} from "@/lib/contacts-search/provider";
 
 const ENRICH_CAP = 25; // cap synchronous website fetches per search
 
@@ -82,6 +88,7 @@ export async function searchLeads(
       org_id: org.id,
       user_id: userId,
       provider: provider.name,
+      kind: "companies",
       category,
       location,
       status: "running",
@@ -272,4 +279,239 @@ export async function importLeads(
   if (contacts) revalidatePath("/contacts");
 
   return { ok: true, imported, contacts, skipped };
+}
+
+// ---- People / contact search ------------------------------------------------
+
+/** A found person — carries everything needed to import them later. */
+export type ContactLeadResult = {
+  externalId: string;
+  firstName: string | null;
+  lastName: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  companyName: string | null;
+  domain: string | null;
+  city: string | null;
+  region: string | null;
+  linkedinUrl: string | null;
+  /** Already in the CRM (matched by email) — not importable again. */
+  existing: boolean;
+};
+
+export type ContactSearchState = {
+  ok?: boolean;
+  error?: string;
+  results?: ContactLeadResult[];
+  jobId?: string | null;
+};
+
+export type ContactImportState = {
+  ok?: boolean;
+  error?: string;
+  imported?: number;
+  linked?: number;
+  skipped?: number;
+};
+
+/**
+ * Search for people by role/title, optionally anchored to a company/location.
+ * Does NOT write contacts — returns candidates for the user to review. Only
+ * logs the search itself (reusing scrape_jobs with kind='contacts').
+ */
+export async function searchContacts(
+  _prev: ContactSearchState,
+  fd: FormData
+): Promise<ContactSearchState> {
+  const { supabase, org, userId } = await requireContext();
+
+  const title = String(fd.get("title") ?? "").trim();
+  const location = String(fd.get("location") ?? "").trim();
+  const company = String(fd.get("company") ?? "").trim();
+  const seniority = String(fd.get("seniority") ?? "").trim();
+  const department = String(fd.get("department") ?? "").trim();
+  const limit = Math.min(Math.max(Number(fd.get("limit")) || 20, 1), 60);
+  const hasEmail = fd.get("has_email") === "on";
+
+  if (!title) return { error: "Enter a role or job title to search for." };
+
+  const provider = getContactsProvider();
+
+  const { data: job } = await supabase
+    .from("scrape_jobs")
+    .insert({
+      org_id: org.id,
+      user_id: userId,
+      provider: provider.name,
+      kind: "contacts",
+      category: title,
+      location: location || company || "—",
+      status: "running",
+    })
+    .select("id")
+    .single();
+  const jobId = (job?.id as string | undefined) ?? null;
+
+  try {
+    const results = await provider.search({
+      title,
+      location: location || undefined,
+      company: company || undefined,
+      seniority: seniority || undefined,
+      department: department || undefined,
+      limit,
+      hasEmail,
+    });
+
+    const candidates = applyContactFilters(results, { hasEmail });
+
+    // Flag people already in the CRM (matched by email).
+    const emails = candidates
+      .map((r) => r.email?.toLowerCase())
+      .filter((e): e is string => !!e);
+    const existingEmails = new Set<string>();
+    if (emails.length) {
+      const { data: existing } = await supabase
+        .from("contacts")
+        .select("email")
+        .eq("org_id", org.id)
+        .in("email", emails);
+      for (const c of existing ?? [])
+        if ((c as { email: string | null }).email)
+          existingEmails.add((c as { email: string }).email.toLowerCase());
+    }
+
+    const leadResults: ContactLeadResult[] = candidates.map((r) => ({
+      externalId: r.externalId,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      title: r.title,
+      email: r.email,
+      phone: r.phone,
+      companyName: r.companyName,
+      domain: r.domain,
+      city: r.city,
+      region: r.region,
+      linkedinUrl: r.linkedinUrl,
+      existing: r.email ? existingEmails.has(r.email.toLowerCase()) : false,
+    }));
+
+    const deduped = leadResults.filter((r) => r.existing).length;
+
+    if (jobId) {
+      await supabase
+        .from("scrape_jobs")
+        .update({
+          status: "completed",
+          requested: leadResults.length,
+          deduped,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+    }
+
+    revalidatePath("/prospect");
+    return { ok: true, results: leadResults, jobId };
+  } catch (e) {
+    const message = (e as Error).message;
+    if (jobId) {
+      await supabase
+        .from("scrape_jobs")
+        .update({
+          status: "failed",
+          error: message,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+    }
+    revalidatePath("/prospect");
+    return { error: message };
+  }
+}
+
+/** Import the user-selected people into the contacts list. */
+export async function importContacts(
+  jobId: string | null,
+  selected: ContactLeadResult[]
+): Promise<ContactImportState> {
+  const { supabase, org, userId } = await requireContext();
+
+  if (!selected.length) return { error: "Select at least one person to add." };
+
+  // Re-check what's already in the CRM (guards against races / stale flags).
+  const emails = selected
+    .map((r) => r.email?.toLowerCase())
+    .filter((e): e is string => !!e);
+  const existingEmails = new Set<string>();
+  if (emails.length) {
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("email")
+      .eq("org_id", org.id)
+      .in("email", emails);
+    for (const c of existing ?? [])
+      if ((c as { email: string | null }).email)
+        existingEmails.add((c as { email: string }).email.toLowerCase());
+  }
+
+  const seen = new Set<string>();
+  const fresh = selected.filter((r) => {
+    const key = r.email?.toLowerCase() || r.externalId;
+    if (!key || seen.has(key)) return false;
+    if (r.email && existingEmails.has(r.email.toLowerCase())) return false;
+    seen.add(key);
+    return true;
+  });
+  const skipped = selected.length - fresh.length;
+
+  if (!fresh.length) return { ok: true, imported: 0, linked: 0, skipped };
+
+  // Link to an existing company by name (best-effort). We don't auto-create
+  // companies here — a null company_id is fine and avoids junk records.
+  const names = Array.from(
+    new Set(fresh.map((r) => r.companyName).filter((n): n is string => !!n))
+  );
+  const companyByName = new Map<string, string>();
+  if (names.length) {
+    const { data: cos } = await supabase
+      .from("companies")
+      .select("id, name")
+      .eq("org_id", org.id)
+      .in("name", names);
+    for (const co of (cos ?? []) as { id: string; name: string }[])
+      companyByName.set(co.name.toLowerCase(), co.id);
+  }
+
+  const rows = fresh.map((r) =>
+    contactPayload(
+      r as ContactResult,
+      org.id,
+      userId,
+      r.companyName ? companyByName.get(r.companyName.toLowerCase()) ?? null : null
+    )
+  );
+
+  const { data: inserted, error } = await supabase
+    .from("contacts")
+    .insert(rows)
+    .select("id, company_id");
+  if (error) return { error: error.message };
+
+  const imported = inserted?.length ?? 0;
+  const linked = (inserted ?? []).filter(
+    (c) => (c as { company_id: string | null }).company_id
+  ).length;
+
+  if (jobId) {
+    await supabase
+      .from("scrape_jobs")
+      .update({ imported, contacts: imported })
+      .eq("id", jobId);
+  }
+
+  revalidatePath("/contacts");
+  revalidatePath("/prospect");
+
+  return { ok: true, imported, linked, skipped };
 }

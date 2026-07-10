@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { Plus, Trash2, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,25 +53,13 @@ export function Mailboxes({
 
   return (
     <div className="space-y-4">
-      {deliveryConfigured ? (
+      {deliveryConfigured && (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <p className="text-muted-foreground">
             Email delivery is connected. Campaigns and workflows send from these
             addresses — make sure each one is on a domain you&apos;ve verified
             with your delivery provider.
-          </p>
-        </div>
-      ) : (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-muted-foreground">
-            No delivery provider is connected, so emails won&apos;t actually be
-            sent. Set{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-              EMAIL_PROVIDER_API_KEY
-            </code>{" "}
-            in your environment to go live.
           </p>
         </div>
       )}
