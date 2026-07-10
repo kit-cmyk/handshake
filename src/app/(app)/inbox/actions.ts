@@ -9,6 +9,7 @@ import { wrapEmail } from "@/lib/email/layout";
 import { makeSnippet } from "@/lib/inbox/inbound";
 import {
   ACTIVITY_TYPES,
+  CONVERSATION_STATUSES,
   type ActivityType,
   type ConversationStatus,
 } from "@/lib/types";
@@ -282,6 +283,8 @@ export async function setConversationStatus(
   status: ConversationStatus
 ): Promise<void> {
   const { supabase } = await requireContext();
+  // Server actions are public endpoints; ignore an invalid enum at runtime.
+  if (!CONVERSATION_STATUSES.includes(status)) return;
   await supabase
     .from("conversations")
     .update({ status })

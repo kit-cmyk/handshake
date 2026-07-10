@@ -45,8 +45,14 @@ export function InboxFilters({
     [params, pathname]
   );
 
+  // Sync the local term when the URL query changes, adjusting during render
+  // (React's recommended pattern) rather than in an effect.
   const [term, setTerm] = React.useState(q);
-  React.useEffect(() => setTerm(q), [q]);
+  const [prevQ, setPrevQ] = React.useState(q);
+  if (q !== prevQ) {
+    setPrevQ(q);
+    setTerm(q);
+  }
 
   // Debounce search into the URL.
   React.useEffect(() => {

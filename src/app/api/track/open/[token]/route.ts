@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inngest } from "@/lib/inngest/client";
 import { verifyToken, PIXEL_GIF } from "@/lib/email/tracking";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 // Open-tracking pixel. Records an `opened` event, then always returns the 1x1
 // GIF (even for bad tokens) so email clients never render a broken image.
@@ -20,12 +21,15 @@ function pixel(): Response {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ token: string }> }
 ) {
   const { token } = await ctx.params;
   const t = verifyToken(token);
-  if (t) {
+  // Under a flood from one IP, still return the pixel but skip the recorded
+  // work (DB write + workflow fan-out) so email clients never see a broken image.
+  const { allowed } = rateLimit(`open:${clientIp(req)}`, 120, 60);
+  if (t && allowed) {
     const admin = createAdminClient();
     await admin.from("events").insert({
       org_id: t.orgId,

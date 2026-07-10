@@ -22,8 +22,14 @@ import { cn } from "@/lib/utils";
 
 async function uploadImage(file: File): Promise<string> {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in to upload images.");
   const ext = (file.name.split(".").pop() || "png").toLowerCase();
-  const path = `${crypto.randomUUID()}.${ext}`;
+  // Upload into the uploader's own folder so the storage policy can scope
+  // writes/deletes per user (email-assets/<user_id>/...).
+  const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
     .from("email-assets")
     .upload(path, file, { contentType: file.type || "image/png" });
@@ -73,7 +79,10 @@ export function RichEmailEditor({
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const onChangeRef = React.useRef(onChange);
-  onChangeRef.current = onChange;
+  // Keep the ref current without writing to it during render.
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   // Upload dropped/pasted image files, then insert at the current selection.
   const insertFiles = React.useCallback(

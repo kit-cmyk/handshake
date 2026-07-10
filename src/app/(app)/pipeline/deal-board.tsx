@@ -57,9 +57,14 @@ export function DealBoard({
   const router = useRouter();
 
   // Local copy so a dropped card jumps to its new column immediately; the prop
-  // is the source of truth once router.refresh() lands.
+  // is the source of truth once router.refresh() lands. Re-sync when the prop
+  // changes by adjusting during render (React's recommended pattern).
   const [board, setBoard] = React.useState(deals);
-  React.useEffect(() => setBoard(deals), [deals]);
+  const [prevDeals, setPrevDeals] = React.useState(deals);
+  if (deals !== prevDeals) {
+    setPrevDeals(deals);
+    setBoard(deals);
+  }
 
   const [draggingId, setDraggingId] = React.useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = React.useState<string | null>(null);

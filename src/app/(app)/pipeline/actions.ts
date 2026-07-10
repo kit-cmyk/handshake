@@ -249,6 +249,19 @@ export async function saveDeal(
     return { error: "Link the deal to a company or a contact." };
   }
 
+  // Verify every linked record belongs to this org. RLS hides foreign rows from
+  // reads, but an INSERT's WITH CHECK only validates the deal's own org_id — so a
+  // forged foreign pipeline/stage/company/contact id would otherwise be written.
+  const owns = async (table: string, fkId: string | null): Promise<boolean> => {
+    if (!fkId) return true;
+    const { data } = await supabase.from(table).select("id").eq("id", fkId).maybeSingle();
+    return !!data;
+  };
+  if (!(await owns("pipelines", pipeline_id))) return { error: "Invalid pipeline." };
+  if (!(await owns("stages", stage_id))) return { error: "Invalid stage." };
+  if (!(await owns("companies", company_id))) return { error: "Invalid company." };
+  if (!(await owns("contacts", contact_id))) return { error: "Invalid contact." };
+
   const valueRaw = str(fd, "value");
   const value = valueRaw ? Number(valueRaw.replace(/[,$]/g, "")) : null;
 
@@ -429,14 +442,18 @@ export async function moveDeal(dealId: string, stageId: string) {
     );
   }
 
-  // Move the contact's lifecycle to match the deal's new pipeline position.
-  await syncContactLifecycleFromDeal(
-    supabase,
-    org.id,
-    priorRow?.contact_id,
-    (stage as { name: string | null; lifecycle_stage: LifecycleStage | null } | null) ?? null,
-    newStatus,
-  );
+  // Move the contact's lifecycle to match the deal's new pipeline position —
+  // only when the stage actually changed, so re-dropping a deal on its current
+  // stage doesn't churn the contact or emit a spurious stage-change event.
+  if (priorRow && priorRow.stage_id !== stageId) {
+    await syncContactLifecycleFromDeal(
+      supabase,
+      org.id,
+      priorRow.contact_id,
+      (stage as { name: string | null; lifecycle_stage: LifecycleStage | null } | null) ?? null,
+      newStatus,
+    );
+  }
 
   revalidatePath("/pipeline");
   revalidatePath("/contacts");

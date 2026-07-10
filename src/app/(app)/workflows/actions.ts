@@ -213,6 +213,9 @@ export async function setWorkflowStatus(
   status: WorkflowStatus
 ): Promise<WorkflowState> {
   const { supabase } = await requireContext();
+  // Server actions are public endpoints; validate the enum at runtime.
+  const WORKFLOW_STATUSES: WorkflowStatus[] = ["draft", "running", "paused", "ended"];
+  if (!WORKFLOW_STATUSES.includes(status)) return { error: "Invalid status." };
   const { error } = await supabase
     .from("workflows")
     .update({ status })

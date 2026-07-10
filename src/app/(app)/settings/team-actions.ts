@@ -9,6 +9,7 @@ import { wrapEmail } from "@/lib/email/layout";
 export type TeamState = { ok?: boolean; error?: string; message?: string };
 
 const ROLES = ["admin", "member"];
+const CAN_MANAGE = ["owner", "admin"];
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -17,6 +18,12 @@ export async function createInvite(
   fd: FormData
 ): Promise<TeamState> {
   const { supabase, org } = await requireContext();
+
+  // Only owners/admins may invite members — otherwise any member could invite
+  // an accomplice as `admin` (the only path to an elevated role), escalating
+  // privilege within the org.
+  if (!CAN_MANAGE.includes(org.role))
+    return { error: "Only workspace admins can invite members." };
 
   const email = String(fd.get("email") ?? "")
     .trim()
@@ -73,7 +80,9 @@ export async function createInvite(
 }
 
 export async function revokeInvite(id: string): Promise<TeamState> {
-  const { supabase } = await requireContext();
+  const { supabase, org } = await requireContext();
+  if (!CAN_MANAGE.includes(org.role))
+    return { error: "Only workspace admins can revoke invitations." };
   const { error } = await supabase
     .from("invitations")
     .update({ status: "revoked" })

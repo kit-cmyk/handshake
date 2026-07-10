@@ -4,6 +4,7 @@ import { verifyWebhookSecret } from "@/lib/email/webhook-auth";
 import { shouldStopOnReply } from "@/lib/campaigns/reply";
 import { notifyReplyReceived } from "@/lib/integrations/notify";
 import { inngest } from "@/lib/inngest/client";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 // Generic email-provider webhook. Maps a delivery event back to the original
 // `sent` event via message_id, then records opens/clicks/replies/bounces and
@@ -24,6 +25,13 @@ const ALLOWED = new Set([
 ]);
 
 export async function POST(request: Request) {
+  const { allowed, retryAfter } = rateLimit(`wh-email:${clientIp(request)}`, 600, 60);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate limited" },
+      { status: 429, headers: { "retry-after": String(retryAfter) } }
+    );
+  }
   if (!verifyWebhookSecret(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

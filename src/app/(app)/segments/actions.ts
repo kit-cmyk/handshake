@@ -7,7 +7,7 @@ import { requireContext } from "@/lib/context";
 import {
   parseDefinition,
   evaluateFilter,
-  EVALUABLE_SELECT,
+  fetchAllEvaluable,
   type EvaluableContact,
   type SegmentDefinition,
 } from "@/lib/segments";
@@ -26,11 +26,8 @@ async function fetchEvaluable(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<EvaluableContact[]> {
-  const { data } = await supabase
-    .from("contacts")
-    .select(EVALUABLE_SELECT)
-    .eq("org_id", orgId);
-  return (data ?? []) as unknown as EvaluableContact[];
+  // Page past the 1000-row cap so previews/snapshots see every contact.
+  return fetchAllEvaluable(supabase, orgId);
 }
 
 /** Resolve a definition and replace the segment's cached membership rows. */

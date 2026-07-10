@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseUnsubToken } from "@/lib/unsubscribe";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 function page(message: string): NextResponse {
   return new NextResponse(
@@ -12,6 +13,14 @@ function page(message: string): NextResponse {
 }
 
 export async function GET(request: Request) {
+  const { allowed, retryAfter } = rateLimit(`unsub:${clientIp(request)}`, 30, 60);
+  if (!allowed) {
+    return new NextResponse("Too many requests. Please try again shortly.", {
+      status: 429,
+      headers: { "retry-after": String(retryAfter) },
+    });
+  }
+
   const token = new URL(request.url).searchParams.get("token");
   const parsed = token ? parseUnsubToken(token) : null;
   if (!parsed) return page("Invalid unsubscribe link.");
@@ -59,11 +68,24 @@ export async function GET(request: Request) {
     .eq("contact_id", contact.id)
     .eq("status", "active");
 
+  // Only attribute the unsubscribe to a campaign that actually belongs to this
+  // contact's org — never trust the token's campaign id to reference a foreign org.
+  let campaignId: string | null = null;
+  if (parsed.campaignId) {
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("id")
+      .eq("id", parsed.campaignId)
+      .eq("org_id", contact.org_id)
+      .maybeSingle();
+    campaignId = campaign ? parsed.campaignId : null;
+  }
+
   await admin.from("events").insert({
     org_id: contact.org_id,
     type: "unsubscribed",
     contact_id: contact.id,
-    campaign_id: parsed.campaignId,
+    campaign_id: campaignId,
   });
 
   return page("You've been unsubscribed. You won't receive further emails.");

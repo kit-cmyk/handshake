@@ -1,13 +1,16 @@
 import crypto from "node:crypto";
 
 // Shared-secret guard for the public email webhooks. Set EMAIL_WEBHOOK_SECRET
-// in production; providers must send it as `x-webhook-secret` (or Bearer). When
-// the env var is unset (local/mock dev) the guard is open so E2E tests can post
-// synthetic events without configuration.
+// in production; providers must send it as `x-webhook-secret` (or Bearer).
+//
+// Fail CLOSED in production: if the secret is unset there, reject every request
+// rather than silently authenticating the world (a forgotten env var must not
+// disable webhook auth). Outside production (local/mock dev, E2E) an unset
+// secret leaves the guard open so synthetic events can be posted without config.
 
 export function verifyWebhookSecret(request: Request): boolean {
   const expected = process.env.EMAIL_WEBHOOK_SECRET;
-  if (!expected) return true; // dev/mock: no secret configured
+  if (!expected) return process.env.NODE_ENV !== "production";
 
   const header =
     request.headers.get("x-webhook-secret") ??

@@ -19,6 +19,7 @@ import {
 import { wrapEmail } from "@/lib/email/layout";
 import {
   CAMPAIGN_AUDIENCE_MODES,
+  CAMPAIGN_STATUSES,
   type CampaignStatus,
   type CampaignAudienceMode,
 } from "@/lib/types";
@@ -87,6 +88,28 @@ export async function saveCampaign(
       contactIds = raw.filter((x): x is string => typeof x === "string");
   } catch {
     contactIds = [];
+  }
+
+  // Verify org ownership of every linked record. RLS hides foreign rows on read
+  // but INSERT/UPDATE WITH CHECK only validates the row's own org_id — so a forged
+  // foreign mailbox/segment/contact id would otherwise be persisted on the campaign.
+  const ownsRow = async (table: string, fkId: string | null): Promise<boolean> => {
+    if (!fkId) return true;
+    const { data } = await supabase.from(table).select("id").eq("id", fkId).maybeSingle();
+    return !!data;
+  };
+  if (!(await ownsRow("mailboxes", mailbox_id))) return { error: "Invalid mailbox." };
+  if (!(await ownsRow("segments", providedSegmentId)))
+    return { error: "Invalid audience segment." };
+  if (!(await ownsRow("segments", exclude_segment_id)))
+    return { error: "Invalid exclusion segment." };
+  if (contactIds.length) {
+    const { data: owned } = await supabase
+      .from("contacts")
+      .select("id")
+      .in("id", contactIds);
+    const ownedSet = new Set((owned ?? []).map((c) => (c as { id: string }).id));
+    contactIds = contactIds.filter((cid) => ownedSet.has(cid));
   }
 
   let steps: StepInput[] = [];
@@ -432,6 +455,9 @@ export async function setCampaignStatus(
   status: CampaignStatus
 ): Promise<CampaignState> {
   const { supabase } = await requireContext();
+  // Server actions are public endpoints; validate the enum rather than trusting
+  // the TS type at runtime.
+  if (!CAMPAIGN_STATUSES.includes(status)) return { error: "Invalid status." };
   const { error } = await supabase
     .from("campaigns")
     .update({ status })

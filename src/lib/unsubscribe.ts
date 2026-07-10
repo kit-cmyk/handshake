@@ -1,22 +1,22 @@
-// Opaque-ish unsubscribe token. Not cryptographically signed (MVP) — encodes
-// the contact + campaign so the public route can resolve who's opting out.
+// Unsubscribe token. HMAC-signed (shared codec) so the public unsubscribe route
+// can trust the encoded contact + campaign without a DB lookup and without the
+// token being forgeable/enumerable — an attacker can no longer craft a valid
+// token for an arbitrary contact id.
+
+import { encodeToken, decodeToken } from "@/lib/crypto-token";
+
+type UnsubPayload = { c: string; ca: string };
 
 export function makeUnsubToken(contactId: string, campaignId: string): string {
-  return Buffer.from(`${contactId}:${campaignId}`).toString("base64url");
+  return encodeToken({ c: contactId, ca: campaignId } satisfies UnsubPayload);
 }
 
 export function parseUnsubToken(
   token: string
 ): { contactId: string; campaignId: string | null } | null {
-  try {
-    const [contactId, campaignId] = Buffer.from(token, "base64url")
-      .toString("utf8")
-      .split(":");
-    if (!contactId) return null;
-    return { contactId, campaignId: campaignId || null };
-  } catch {
-    return null;
-  }
+  const p = decodeToken<UnsubPayload>(token);
+  if (!p || !p.c) return null;
+  return { contactId: p.c, campaignId: p.ca || null };
 }
 
 export function unsubUrl(contactId: string, campaignId: string): string {

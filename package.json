@@ -50,6 +50,10 @@
     "three": "^0.185.1",
     "zod": "^4.4.3"
   },
+  "//overrides": "@base-ui/react optionally peer-depends on date-fns v4, but the app and react-day-picker@8 use v3. @base-ui uses no date components here (combobox only), so pin date-fns to the root v3 for everyone — otherwise npm install/ci fails to resolve without --legacy-peer-deps.",
+  "overrides": {
+    "date-fns": "$date-fns"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",

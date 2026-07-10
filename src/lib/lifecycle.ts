@@ -91,7 +91,9 @@ export async function syncContactLifecycleFromDeal(
     .maybeSingle();
 
   const current = (contact?.lifecycle_stage as string | undefined) ?? null;
-  if (!current || current === target) return;
+  // A contact with no lifecycle yet (e.g. imported without a stage) must still
+  // adopt the deal's target — only skip when it already matches.
+  if (current === target) return;
 
   const { error } = await client
     .from("contacts")

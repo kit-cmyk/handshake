@@ -573,6 +573,9 @@ export function WorkflowBuilder({
     triggerType === "manual" || triggerType === "segment_entry";
   React.useEffect(() => {
     if (!usesSegmentTrigger || !activeSegmentId) {
+      // Data-fetching effect (segment dry-run count); resetting before the async
+      // fetch is intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSegCount(null);
       return;
     }
