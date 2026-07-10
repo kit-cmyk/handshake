@@ -12,6 +12,7 @@ import {
   ListFilter,
   Send,
   Workflow,
+  LayoutTemplate,
   BarChart3,
   Settings,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/campaigns", label: "Campaigns", icon: Send },
   { href: "/workflows", label: "Workflows", icon: Workflow },
+  { href: "/templates", label: "Templates", icon: LayoutTemplate },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

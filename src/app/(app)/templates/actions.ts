@@ -64,6 +64,111 @@ export async function deleteTemplate(id: string): Promise<TemplateState> {
   return { ok: true };
 }
 
+/** Snapshot an existing campaign (+ its steps) into a reusable template. */
+export async function saveCampaignAsTemplate(input: {
+  campaignId: string;
+  name: string;
+  description?: string;
+}): Promise<TemplateState> {
+  const { supabase, org, userId } = await requireContext();
+  const name = input.name?.trim();
+  if (!name) return { error: "Give the template a name." };
+
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("id, stop_on_reply")
+    .eq("id", input.campaignId)
+    .eq("org_id", org.id)
+    .maybeSingle();
+  if (!campaign) return { error: "Campaign not found." };
+
+  const { data: steps } = await supabase
+    .from("campaign_steps")
+    .select("subject, body, wait_minutes, stop_on_reply, position")
+    .eq("campaign_id", input.campaignId)
+    .order("position", { ascending: true });
+
+  if (!steps?.length) return { error: "This campaign has no steps to save." };
+
+  const content: CampaignTemplateContent = {
+    stop_on_reply: !!(campaign as { stop_on_reply: boolean }).stop_on_reply,
+    steps: steps.map((s) => {
+      const step = s as {
+        subject: string | null;
+        body: string | null;
+        wait_minutes: number | null;
+        stop_on_reply: boolean | null;
+      };
+      return {
+        subject: step.subject ?? "",
+        body: step.body ?? "",
+        wait_minutes: step.wait_minutes ?? 0,
+        stop_on_reply: step.stop_on_reply ?? null,
+      };
+    }),
+  };
+
+  const { data, error } = await supabase
+    .from("templates")
+    .insert({
+      org_id: org.id,
+      kind: "campaign",
+      name,
+      description: input.description?.trim() || null,
+      content,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/templates");
+  return { ok: true, id: data.id as string };
+}
+
+/** Snapshot an existing workflow (trigger + graph) into a reusable template. */
+export async function saveWorkflowAsTemplate(input: {
+  workflowId: string;
+  name: string;
+  description?: string;
+}): Promise<TemplateState> {
+  const { supabase, org, userId } = await requireContext();
+  const name = input.name?.trim();
+  if (!name) return { error: "Give the template a name." };
+
+  const { data: workflow } = await supabase
+    .from("workflows")
+    .select("trigger_type, graph")
+    .eq("id", input.workflowId)
+    .eq("org_id", org.id)
+    .maybeSingle();
+  if (!workflow) return { error: "Workflow not found." };
+
+  const wf = workflow as {
+    trigger_type: WorkflowTemplateContent["trigger_type"];
+    graph: WorkflowTemplateContent["graph"];
+  };
+  const content: WorkflowTemplateContent = {
+    trigger_type: wf.trigger_type,
+    graph: wf.graph ?? { nodes: [], edges: [] },
+  };
+
+  const { data, error } = await supabase
+    .from("templates")
+    .insert({
+      org_id: org.id,
+      kind: "workflow",
+      name,
+      description: input.description?.trim() || null,
+      content,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/templates");
+  return { ok: true, id: data.id as string };
+}
+
 function validateContent(kind: TemplateKind, content: TemplateContent): boolean {
   if (!content || typeof content !== "object") return false;
   if (kind === "email") {

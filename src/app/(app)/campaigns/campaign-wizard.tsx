@@ -23,6 +23,7 @@ import {
   Search,
   ArrowRight,
   ArrowLeft,
+  Bookmark,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RichEmailEditor } from "@/components/rich-email-editor";
+import { RichEmailEditor, type EmailSnippet } from "@/components/rich-email-editor";
 import {
   Select,
   SelectContent,
@@ -67,6 +68,7 @@ import {
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { DateTimePicker } from "@/components/ui/date-picker";
 import { saveCampaign, sendTestEmail, type CampaignState } from "./actions";
+import { saveTemplate } from "../templates/actions";
 import { CONTACT_FIELDS, validateRow, type MappedRow } from "../import/fields";
 import { runImport, type ImportResult } from "../import/actions";
 import { DataHealthCallout } from "@/components/data-health-callout";
@@ -157,6 +159,9 @@ export function CampaignWizard({
   contacts,
   initialContactIds,
   defaultTestEmail,
+  initialName,
+  initialStopOnReply,
+  emailTemplates,
 }: {
   campaign?: Campaign;
   steps?: CampaignStep[];
@@ -165,6 +170,11 @@ export function CampaignWizard({
   contacts: ContactOption[];
   initialContactIds?: string[];
   defaultTestEmail?: string | null;
+  /** Seed a brand-new campaign (from a template) without marking it as an edit. */
+  initialName?: string;
+  initialStopOnReply?: boolean;
+  /** Reusable email snippets offered via the editor's "Insert template" menu. */
+  emailTemplates?: EmailSnippet[];
 }) {
   const [state, formAction, pending] = useActionState<CampaignState, FormData>(
     saveCampaign,
@@ -174,7 +184,7 @@ export function CampaignWizard({
   const [step, setStep] = React.useState(1);
 
   // ---- Step 1: campaign + sender -------------------------------------------
-  const [name, setName] = React.useState(campaign?.name ?? "");
+  const [name, setName] = React.useState(campaign?.name ?? initialName ?? "");
   const [mailboxId, setMailboxId] = React.useState(campaign?.mailbox_id ?? NONE);
 
   // ---- Step 2: audience -----------------------------------------------------
@@ -196,7 +206,7 @@ export function CampaignWizard({
     campaign?.exclude_segment_id ?? NONE
   );
   const [stopOnReply, setStopOnReply] = React.useState(
-    campaign?.stop_on_reply ?? true
+    campaign?.stop_on_reply ?? initialStopOnReply ?? true
   );
 
   // ---- Step 3: sequence -----------------------------------------------------
@@ -236,6 +246,12 @@ export function CampaignWizard({
   } | null>(null);
   const [testing, startTest] = useTransition();
   const [dragUid, setDragUid] = React.useState<string | null>(null);
+  const [savingTpl, startSaveTpl] = useTransition();
+  const [savedTpl, setSavedTpl] = React.useState<{
+    uid: string;
+    text: string;
+    ok: boolean;
+  } | null>(null);
 
   // ---- Step 4: review side sheet -------------------------------------------
   const [reviewStep, setReviewStep] = React.useState<StepDraft | null>(null);
@@ -330,6 +346,26 @@ export function CampaignWizard({
       setTestMsg({
         uid: s.uid,
         text: res.error ?? `Test sent to ${testEmail}.`,
+        ok: !res.error,
+      });
+    });
+  }
+
+  // Save a single step's subject + body to the reusable email template library.
+  function saveStepAsTemplate(s: StepDraft) {
+    if (!s.subject.trim() || !stripHtml(s.body)) return;
+    const name = window.prompt("Save this email as a template. Template name:");
+    if (!name?.trim()) return;
+    setSavedTpl(null);
+    startSaveTpl(async () => {
+      const res = await saveTemplate({
+        kind: "email",
+        name: name.trim(),
+        content: { subject: s.subject, body: s.body },
+      });
+      setSavedTpl({
+        uid: s.uid,
+        text: res.error ?? "Saved to templates.",
         ok: !res.error,
       });
     });
@@ -805,7 +841,14 @@ export function CampaignWizard({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <RichEmailEditor value={s.body} onChange={(html) => updateStep(s.uid, { body: html })} />
+                      <RichEmailEditor
+                        value={s.body}
+                        onChange={(html) => updateStep(s.uid, { body: html })}
+                        emailTemplates={emailTemplates}
+                        onApplyTemplate={(snip) =>
+                          updateStep(s.uid, { subject: snip.subject })
+                        }
+                      />
                     </div>
                   )}
 
@@ -816,6 +859,27 @@ export function CampaignWizard({
                     <Button type="button" variant="ghost" size="sm" disabled={testing || !testEmail.trim() || invalid} onClick={() => runTest(s)}>
                       <Send className="size-4" /> Send test
                     </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={savingTpl || invalid}
+                      onClick={() => saveStepAsTemplate(s)}
+                    >
+                      <Bookmark className="size-4" /> Save as template
+                    </Button>
+                    {savedTpl?.uid === s.uid && (
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs ${savedTpl.ok ? "text-green-600" : "text-destructive"}`}
+                      >
+                        {savedTpl.ok ? (
+                          <CheckCircle2 className="size-3" />
+                        ) : (
+                          <AlertCircle className="size-3" />
+                        )}
+                        {savedTpl.text}
+                      </span>
+                    )}
                     {invalid && (
                       <span className="inline-flex items-center gap-1 text-xs text-destructive">
                         <AlertCircle className="size-3" /> Needs a subject and body

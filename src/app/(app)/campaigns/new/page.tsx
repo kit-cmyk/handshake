@@ -1,13 +1,24 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/lib/context";
-import { CampaignWizard } from "../campaign-wizard";
+import { NewCampaign } from "./new-campaign";
 import { loadCampaignContacts } from "../contact-options";
+import {
+  findTemplate,
+  loadEmailSnippets,
+  loadTemplatesByKind,
+} from "@/lib/templates/queries";
+import { isCampaignTemplate, type CampaignTemplate } from "@/lib/templates/types";
 import type { Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
 
-export default async function NewCampaignPage() {
+export default async function NewCampaignPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ template?: string }>;
+}) {
   const { supabase, org, userEmail } = await requireContext();
+  const { template: templateId } = await searchParams;
 
   const [{ data: segments }, { data: mailboxes }, { data: members }, contacts] =
     await Promise.all([
@@ -44,6 +55,20 @@ export default async function NewCampaignPage() {
     name: m.display_name ? `${m.display_name} · ${m.email}` : m.email,
   }));
 
+  // Campaign templates (curated + org-saved) for the picker gallery, plus an
+  // optional deep-linked selection from the template library.
+  const campaignTemplates = (
+    await loadTemplatesByKind(supabase, org.id, "campaign")
+  ).filter(isCampaignTemplate);
+
+  let initialTemplate: CampaignTemplate | null = null;
+  if (templateId) {
+    const found = await findTemplate(supabase, org.id, templateId, "campaign");
+    if (found && isCampaignTemplate(found)) initialTemplate = found;
+  }
+
+  const emailTemplates = await loadEmailSnippets(supabase, org.id);
+
   return (
     <div className="space-y-6">
       <Link
@@ -58,11 +83,14 @@ export default async function NewCampaignPage() {
           Five quick steps: details, audience, sequence, review, and schedule.
         </p>
       </div>
-      <CampaignWizard
+      <NewCampaign
+        templates={campaignTemplates}
+        initialTemplate={initialTemplate}
         segments={segmentOptions}
         mailboxes={mailboxOptions}
         contacts={contacts}
         defaultTestEmail={userEmail}
+        emailTemplates={emailTemplates}
       />
     </div>
   );

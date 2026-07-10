@@ -4,11 +4,35 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CURATED_TEMPLATES, findCuratedTemplate } from "./curated";
-import type {
-  Template,
-  TemplateContent,
-  TemplateKind,
+import {
+  isEmailTemplate,
+  type Template,
+  type TemplateContent,
+  type TemplateKind,
 } from "./types";
+
+/** Lightweight email snippets for the rich editor's "Insert template" menu. */
+export type EmailSnippet = {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+};
+
+export async function loadEmailSnippets(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<EmailSnippet[]> {
+  const emails = (await loadTemplatesByKind(supabase, orgId, "email")).filter(
+    isEmailTemplate
+  );
+  return emails.map((t) => ({
+    id: t.id,
+    name: t.name,
+    subject: t.content.subject,
+    body: t.content.body,
+  }));
+}
 
 type TemplateRow = {
   id: string;
