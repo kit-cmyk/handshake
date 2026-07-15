@@ -18,6 +18,9 @@ import {
   Plus,
   Check,
   TriangleAlert,
+  Users,
+  ExternalLink,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +30,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   searchLeads,
   importLeads,
+  searchContacts,
+  importContacts,
   type SearchState,
   type ImportState,
+  type ContactSearchState,
+  type ContactImportState,
 } from "./actions";
 
 // Leaflet touches `window`, so load the map client-only.
@@ -47,7 +54,62 @@ const RATING_OPTIONS = [
   { value: "4.5", label: "4.5+" },
 ];
 
+type Mode = "companies" | "people";
+
 export function ProspectForm() {
+  const [mode, setMode] = React.useState<Mode>("companies");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex w-fit rounded-md border p-0.5">
+        <ModeButton
+          active={mode === "companies"}
+          onClick={() => setMode("companies")}
+          icon={Building2}
+          label="Companies"
+        />
+        <ModeButton
+          active={mode === "people"}
+          onClick={() => setMode("people")}
+          icon={Users}
+          label="People"
+        />
+      </div>
+
+      {mode === "companies" ? <CompanySearch /> : <PeopleSearch />}
+    </div>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium ${
+        active
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      <Icon className="size-4" /> {label}
+    </button>
+  );
+}
+
+// ---- Company search ---------------------------------------------------------
+
+function CompanySearch() {
   const router = useRouter();
   const [state, formAction, searching] = useActionState<SearchState, FormData>(
     searchLeads,
@@ -68,9 +130,7 @@ export function ProspectForm() {
     ids: new Set(),
   });
   const selectedIds =
-    sel.key === jobKey
-      ? sel.ids
-      : new Set(importable.map((r) => r.placeId));
+    sel.key === jobKey ? sel.ids : new Set(importable.map((r) => r.placeId));
 
   // Import result, also keyed to the current search so it clears on re-search.
   const [imp, setImp] = React.useState<{ key: string; res: ImportState }>({
@@ -390,6 +450,271 @@ export function ProspectForm() {
                 <Button variant="outline" size="sm" asChild className="ml-auto">
                   <Link href="/companies">
                     <Building2 className="size-4" /> View in Companies
+                  </Link>
+                </Button>
+              </div>
+            )}
+            {importResult?.error && (
+              <p className="text-sm text-destructive">{importResult.error}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---- People search ----------------------------------------------------------
+
+function contactLabel(r: {
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+}) {
+  const full = [r.firstName, r.lastName].filter(Boolean).join(" ").trim();
+  return full || r.email || "Unnamed contact";
+}
+
+function PeopleSearch() {
+  const router = useRouter();
+  const [state, formAction, searching] = useActionState<
+    ContactSearchState,
+    FormData
+  >(searchContacts, {});
+  const [importing, startImport] = useTransition();
+
+  const results = React.useMemo(() => state.results ?? [], [state.results]);
+  const jobKey = state.jobId ?? "";
+  const importable = results.filter((r) => !r.existing);
+
+  const [sel, setSel] = React.useState<{ key: string; ids: Set<string> }>({
+    key: "__none__",
+    ids: new Set(),
+  });
+  const selectedIds =
+    sel.key === jobKey ? sel.ids : new Set(importable.map((r) => r.externalId));
+
+  const [imp, setImp] = React.useState<{ key: string; res: ContactImportState }>(
+    { key: "__none__", res: {} }
+  );
+  const importResult = imp.key === jobKey ? imp.res : null;
+
+  React.useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [state, router]);
+
+  function toggle(id: string) {
+    const ids = new Set(selectedIds);
+    if (ids.has(id)) ids.delete(id);
+    else ids.add(id);
+    setSel({ key: jobKey, ids });
+  }
+
+  function toggleAll() {
+    const allSelected = importable.every((r) => selectedIds.has(r.externalId));
+    setSel({
+      key: jobKey,
+      ids: allSelected
+        ? new Set()
+        : new Set(importable.map((r) => r.externalId)),
+    });
+  }
+
+  function doImport() {
+    const chosen = results.filter((r) => selectedIds.has(r.externalId));
+    if (!chosen.length) return;
+    startImport(async () => {
+      const res = await importContacts(state.jobId ?? null, chosen);
+      setImp({ key: jobKey, res });
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Find people by role and company
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={formAction} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="title">Role / job title</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  placeholder="e.g. VP Sales, Owner, Office Manager"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="people_location">Location</Label>
+                <Input
+                  id="people_location"
+                  name="location"
+                  placeholder="e.g. Austin, TX"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 rounded-lg border bg-muted/30 p-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="company" className="flex items-center gap-1">
+                  <Building2 className="size-4" /> Company or domain
+                </Label>
+                <Input
+                  id="company"
+                  name="company"
+                  placeholder="e.g. Acme Co or acme.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Anchor the search to a company. We&apos;ll link matches to that
+                  company if it already exists in your CRM.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="seniority">Seniority</Label>
+                <Input
+                  id="seniority"
+                  name="seniority"
+                  placeholder="e.g. Director, C-level"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                <Input
+                  id="department"
+                  name="department"
+                  placeholder="e.g. Sales, Operations"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="people_limit">Max results</Label>
+                <Input
+                  id="people_limit"
+                  name="limit"
+                  type="number"
+                  defaultValue={20}
+                  min={1}
+                  max={60}
+                  className="w-28"
+                />
+              </div>
+              <label className="flex items-center gap-2 pb-2 text-sm">
+                <input type="checkbox" name="has_email" defaultChecked />
+                <Mail className="size-4" /> Must have email
+              </label>
+              <Button type="submit" disabled={searching} className="ml-auto">
+                <Search className="size-4" />
+                {searching ? "Searching…" : "Search people"}
+              </Button>
+            </div>
+
+            {state.error && (
+              <p className="text-sm text-destructive">{state.error}</p>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+
+      {state.ok && results.length > 0 && (
+        <Card>
+          <CardHeader className="space-y-0">
+            <CardTitle className="text-base">
+              {results.length} found · {importable.length} new
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={
+                    importable.length > 0 &&
+                    importable.every((r) => selectedIds.has(r.externalId))
+                  }
+                  onChange={toggleAll}
+                  disabled={importable.length === 0}
+                />
+                Select all new ({importable.length})
+              </label>
+              <Button
+                size="sm"
+                onClick={doImport}
+                disabled={importing || selectedIds.size === 0}
+              >
+                <Plus className="size-4" />
+                {importing ? "Adding…" : `Add ${selectedIds.size} to Contacts`}
+              </Button>
+            </div>
+
+            <ul className="max-h-96 divide-y overflow-auto rounded-lg border">
+              {results.map((r) => {
+                const checked = selectedIds.has(r.externalId);
+                return (
+                  <li
+                    key={r.externalId}
+                    className="flex items-center gap-3 px-3 py-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      className="shrink-0"
+                      checked={!r.existing && checked}
+                      disabled={r.existing}
+                      onChange={() => toggle(r.externalId)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{contactLabel(r)}</p>
+                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                        {r.title && (
+                          <>
+                            <Briefcase className="size-3 shrink-0" /> {r.title}
+                          </>
+                        )}
+                        {r.title && r.companyName && " · "}
+                        {r.companyName}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                      {r.email && <Mail className="size-3" />}
+                      {r.phone && <Phone className="size-3" />}
+                      {r.linkedinUrl && <ExternalLink className="size-3" />}
+                      {r.existing && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Check className="size-3" /> In CRM
+                        </Badge>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {importResult?.ok && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="success">
+                  {importResult.imported} added to Contacts
+                </Badge>
+                {(importResult.linked ?? 0) > 0 && (
+                  <Badge variant="default">
+                    {importResult.linked} linked to a company
+                  </Badge>
+                )}
+                {(importResult.skipped ?? 0) > 0 && (
+                  <Badge variant="secondary">
+                    {importResult.skipped} already existed
+                  </Badge>
+                )}
+                <Button variant="outline" size="sm" asChild className="ml-auto">
+                  <Link href="/contacts">
+                    <Users className="size-4" /> View in Contacts
                   </Link>
                 </Button>
               </div>

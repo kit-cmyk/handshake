@@ -75,6 +75,8 @@ export function DealDialog({
 
   React.useEffect(() => {
     if (state.ok) {
+      // Reacts to a form-submit result; the effect is required for router.refresh().
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(false);
       router.refresh();
       onSaved?.();

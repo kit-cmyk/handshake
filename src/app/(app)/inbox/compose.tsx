@@ -53,6 +53,8 @@ export function ComposeEmail({ contacts }: { contacts: ComposeContact[] }) {
 
   React.useEffect(() => {
     if (state.ok && state.conversationId) {
+      // Reacts to a form-submit result; the effect is required for router.push/refresh.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(false);
       setLabel("");
       setSubject("");

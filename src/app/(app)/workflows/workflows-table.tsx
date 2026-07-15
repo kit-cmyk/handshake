@@ -15,7 +15,7 @@ import {
 import { DataTable } from "@/components/data-table";
 import { BulkDeleteButton } from "@/components/bulk-delete-button";
 import { EmptyState } from "@/components/empty-state";
-import { deleteWorkflow } from "./actions";
+import { bulkDeleteWorkflows } from "./actions";
 import type { WorkflowStatus } from "@/lib/workflows";
 
 export type WorkflowRow = {
@@ -104,7 +104,7 @@ export function WorkflowsTable({ data }: { data: WorkflowRow[] }) {
       bulkActions={({ rows, clear }) => (
         <BulkDeleteButton
           ids={rows.map((r) => r.id)}
-          action={deleteWorkflow}
+          action={bulkDeleteWorkflows}
           onDone={clear}
           noun="workflow"
         />

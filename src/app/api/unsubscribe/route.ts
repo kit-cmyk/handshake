@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseUnsubToken } from "@/lib/unsubscribe";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 function page(message: string, formToken?: string): NextResponse {
   // When a token is passed we render a one-click confirm button that POSTs —
@@ -66,11 +67,24 @@ async function unsubscribe(token: string): Promise<boolean> {
     .eq("contact_id", contact.id)
     .eq("status", "active");
 
+  // Only attribute the unsubscribe to a campaign that actually belongs to this
+  // contact's org — never trust the token's campaign id to reference a foreign org.
+  let campaignId: string | null = null;
+  if (parsed.campaignId) {
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("id")
+      .eq("id", parsed.campaignId)
+      .eq("org_id", contact.org_id)
+      .maybeSingle();
+    campaignId = campaign ? parsed.campaignId : null;
+  }
+
   await admin.from("events").insert({
     org_id: contact.org_id,
     type: "unsubscribed",
     contact_id: contact.id,
-    campaign_id: parsed.campaignId,
+    campaign_id: campaignId,
   });
 
   return true;
@@ -79,6 +93,14 @@ async function unsubscribe(token: string): Promise<boolean> {
 // GET is safe (no mutation): show a one-click confirmation button. This keeps
 // automated link scanners from unsubscribing recipients who never clicked.
 export async function GET(request: Request) {
+  const { allowed, retryAfter } = rateLimit(`unsub:${clientIp(request)}`, 30, 60);
+  if (!allowed) {
+    return new NextResponse("Too many requests. Please try again shortly.", {
+      status: 429,
+      headers: { "retry-after": String(retryAfter) },
+    });
+  }
+
   const token = new URL(request.url).searchParams.get("token");
   if (!token || !parseUnsubToken(token))
     return page("Invalid unsubscribe link.");
@@ -92,6 +114,14 @@ export async function GET(request: Request) {
 // and RFC 8058 one-click (List-Unsubscribe-Post), where the mail client POSTs
 // `List-Unsubscribe=One-Click` to the List-Unsubscribe URL (token in the query).
 export async function POST(request: Request) {
+  const { allowed, retryAfter } = rateLimit(`unsub:${clientIp(request)}`, 30, 60);
+  if (!allowed) {
+    return new NextResponse("Too many requests. Please try again shortly.", {
+      status: 429,
+      headers: { "retry-after": String(retryAfter) },
+    });
+  }
+
   let token = new URL(request.url).searchParams.get("token") ?? undefined;
   if (!token) {
     try {

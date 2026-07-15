@@ -39,6 +39,8 @@ export function DealQuickActions({
 
   React.useEffect(() => {
     if (noteState.ok) {
+      // Reacts to a form-submit result; the effect is required for router.refresh().
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNoteOpen(false);
       onChange?.();
       router.refresh();

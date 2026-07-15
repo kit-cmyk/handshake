@@ -39,6 +39,8 @@ import {
   disconnectSlackIntegration,
   type SlackState,
 } from "./integrations-actions";
+import { CrmIntegrations, type CrmCardData } from "./crm-integrations";
+import { BrandGlyph } from "./brand-mark";
 
 type SlackData = {
   connected: boolean;
@@ -51,33 +53,37 @@ export function IntegrationsManager({
   baseUrl,
   canManage,
   secretConfigured,
-  deliveryConfigured,
   mailboxCount,
   replyCount,
   lastReplyAt,
   engagementCount,
   slack,
+  crm,
 }: {
   baseUrl: string;
   canManage: boolean;
   secretConfigured: boolean;
-  deliveryConfigured: boolean;
   mailboxCount: number;
   replyCount: number;
   lastReplyAt: string | null;
   engagementCount: number;
   slack: SlackData;
+  crm: CrmCardData[];
 }) {
   return (
     <div className="space-y-6">
       <Section title="Connected services">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <EmailDeliveryCard
-            mailboxCount={mailboxCount}
-            deliveryConfigured={deliveryConfigured}
-          />
+          <EmailDeliveryCard mailboxCount={mailboxCount} />
           <SlackCard slack={slack} canManage={canManage} />
         </div>
+      </Section>
+
+      <Section
+        title="CRM contact sync"
+        description="Pull contacts in from another CRM. Handshake dedupes by email, so you can run a sync whenever you want without creating duplicates."
+      >
+        <CrmIntegrations cards={crm} canManage={canManage} />
       </Section>
 
       <Section
@@ -189,6 +195,7 @@ function Section({
 
 function CardShell({
   icon: Icon,
+  iconNode,
   chip,
   name,
   description,
@@ -196,6 +203,8 @@ function CardShell({
   children,
 }: {
   icon: LucideIcon;
+  /** Overrides the lucide icon — used to render a per-integration brand mark. */
+  iconNode?: React.ReactNode;
   chip: string;
   name: string;
   description: string;
@@ -211,7 +220,7 @@ function CardShell({
             chip,
           )}
         >
-          <Icon className="size-5" />
+          {iconNode ?? <Icon className="size-5" />}
         </span>
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </div>
@@ -235,17 +244,12 @@ function StatusCard(props: React.ComponentProps<typeof CardShell> & {
 
 function EmailDeliveryCard({
   mailboxCount,
-  deliveryConfigured,
 }: {
   mailboxCount: number;
-  deliveryConfigured: boolean;
 }) {
-  // "Live" requires both a delivery provider (API key) and at least one mailbox.
-  const badge = !deliveryConfigured
-    ? { variant: "outline" as const, label: "Provider not connected" }
-    : mailboxCount > 0
-      ? { variant: "success" as const, label: `${mailboxCount} mailbox${mailboxCount === 1 ? "" : "es"}` }
-      : { variant: "outline" as const, label: "No mailboxes" };
+  const badge = mailboxCount > 0
+    ? { variant: "success" as const, label: `${mailboxCount} mailbox${mailboxCount === 1 ? "" : "es"}` }
+    : { variant: "outline" as const, label: "No mailboxes" };
   return (
     <CardShell
       icon={Mail}
@@ -292,6 +296,7 @@ function SlackCard({
   return (
     <CardShell
       icon={MessageSquare}
+      iconNode={<BrandGlyph type="slack" label="Slack" />}
       chip="bg-amber-500/15 text-amber-600 dark:text-amber-400"
       name="Slack"
       description="Get a message in Slack when a lead replies, a deal is won, or a campaign finishes."

@@ -1,6 +1,7 @@
 // Segment filter model + a pure evaluation engine shared by the builder
 // (client preview), server actions (snapshot/preview), and the Inngest cron.
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "./types";
 
 export type SegmentType = "static" | "dynamic";
@@ -193,3 +194,28 @@ export function parseDefinition(raw: unknown): SegmentDefinition {
 /** Supabase select string that yields EvaluableContact rows. */
 export const EVALUABLE_SELECT =
   "id, email, first_name, last_name, title, source, lifecycle_stage, companies(name, city, industry)";
+
+/**
+ * Fetch every evaluable contact for an org, paging past PostgREST's default
+ * 1000-row cap. Segment evaluation MUST see the full contact set — a truncated
+ * read would silently drop members past the cap and (in the cron) delete them
+ * from segment_members.
+ */
+export async function fetchAllEvaluable(
+  client: SupabaseClient,
+  orgId: string
+): Promise<EvaluableContact[]> {
+  const PAGE = 1000;
+  const all: EvaluableContact[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await client
+      .from("contacts")
+      .select(EVALUABLE_SELECT)
+      .eq("org_id", orgId)
+      .range(from, from + PAGE - 1);
+    const rows = (data ?? []) as unknown as EvaluableContact[];
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return all;
+}

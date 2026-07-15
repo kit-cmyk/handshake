@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Copy, Trash2, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { duplicateCampaign, deleteCampaign } from "../actions";
+import { saveCampaignAsTemplate } from "../../templates/actions";
 
 /**
  * The campaign detail "Actions" menu: edit, duplicate, and delete grouped
@@ -52,6 +53,27 @@ export function CampaignActions({ campaignId }: { campaignId: string }) {
             }
           >
             <Copy /> Duplicate
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              const name = window.prompt(
+                "Save this campaign as a template. Template name:"
+              );
+              if (!name?.trim()) return;
+              start(async () => {
+                setErr(null);
+                const res = await saveCampaignAsTemplate({
+                  campaignId,
+                  name: name.trim(),
+                });
+                if (res.error) setErr(res.error);
+                else router.push("/templates");
+              });
+            }}
+          >
+            <Bookmark /> Save as template
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

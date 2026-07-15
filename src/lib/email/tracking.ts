@@ -3,7 +3,7 @@
 // for clicks, the destination URL) without a DB lookup and without being
 // forgeable — which also closes the open-redirect hole on the click route.
 
-import crypto from "node:crypto";
+import { encodeToken, decodeToken } from "@/lib/crypto-token";
 
 export type TrackContext = {
   orgId: string;
@@ -25,46 +25,8 @@ type Payload = {
   e?: string;
 };
 
-function secret(): string {
-  return (
-    process.env.TRACKING_SECRET ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    "dev-tracking-secret"
-  );
-}
-
-function sign(body: string): string {
-  return crypto
-    .createHmac("sha256", secret())
-    .update(body)
-    .digest("base64url")
-    .slice(0, 24);
-}
-
-function encode(p: Payload): string {
-  const body = Buffer.from(JSON.stringify(p)).toString("base64url");
-  return `${body}.${sign(body)}`;
-}
-
-function decode(token: string): Payload | null {
-  const dot = token.lastIndexOf(".");
-  if (dot < 1) return null;
-  const body = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  // Constant-time compare against the recomputed signature.
-  const expected = sign(body);
-  if (
-    sig.length !== expected.length ||
-    !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-  ) {
-    return null;
-  }
-  try {
-    return JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Payload;
-  } catch {
-    return null;
-  }
-}
+const encode = (p: Payload): string => encodeToken(p);
+const decode = (token: string): Payload | null => decodeToken<Payload>(token);
 
 export function openToken(ctx: TrackContext): string {
   return encode({ o: ctx.orgId, c: ctx.contactId, ca: ctx.campaignId, s: ctx.stepId });

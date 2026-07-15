@@ -213,6 +213,9 @@ export async function setWorkflowStatus(
   status: WorkflowStatus
 ): Promise<WorkflowState> {
   const { supabase } = await requireContext();
+  // Server actions are public endpoints; validate the enum at runtime.
+  const WORKFLOW_STATUSES: WorkflowStatus[] = ["draft", "running", "paused", "ended"];
+  if (!WORKFLOW_STATUSES.includes(status)) return { error: "Invalid status." };
   const { error } = await supabase
     .from("workflows")
     .update({ status })
@@ -280,6 +283,24 @@ export async function deleteWorkflow(id: string): Promise<WorkflowState> {
   if (error) return { error: error.message };
   revalidatePath("/workflows");
   return { ok: true };
+}
+
+/**
+ * Delete a batch of workflows in a single query. Called once per chunk by the
+ * bulk-task runner; the client refreshes the route once at the end, so this
+ * skips per-call revalidation.
+ */
+export async function bulkDeleteWorkflows(
+  ids: string[]
+): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
+  if (!ids.length) return { ok: true, deleted: 0 };
+  const { supabase } = await requireContext();
+  const { error, count } = await supabase
+    .from("workflows")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, deleted: count ?? ids.length };
 }
 
 /**

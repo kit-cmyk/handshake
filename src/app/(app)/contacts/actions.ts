@@ -161,6 +161,18 @@ export async function saveContact(
     return { error: "Enter at least a name or an email." };
   }
 
+  // A linked company must belong to this org. RLS hides foreign rows on read but
+  // an INSERT's WITH CHECK only validates the contact's own org_id, so a forged
+  // foreign company_id would otherwise be written.
+  if (payload.company_id) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("id", payload.company_id)
+      .maybeSingle();
+    if (!company) return { error: "Invalid company." };
+  }
+
   // Capture the prior stage so we can fire a stage-change event on transitions.
   let prevStage: string | null = null;
   if (id) {
@@ -203,11 +215,32 @@ export async function deleteContact(id: string): Promise<FormState> {
   return { ok: true };
 }
 
+/**
+ * Delete a batch of contacts in a single query. The bulk-task runner calls this
+ * once per chunk; the client refreshes the route once when the whole run ends,
+ * so this intentionally skips per-call revalidation.
+ */
+export async function bulkDeleteContacts(
+  ids: string[]
+): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
+  if (!ids.length) return { ok: true, deleted: 0 };
+  const { supabase } = await requireContext();
+  const { error, count } = await supabase
+    .from("contacts")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, deleted: count ?? ids.length };
+}
+
 export async function updateLifecycle(
   id: string,
   stage: LifecycleStage
 ): Promise<FormState> {
   const { supabase, org } = await requireContext();
+  // Server actions are public endpoints — the TS type isn't enforced at runtime,
+  // so allowlist the stage explicitly rather than trusting the argument.
+  if (!LIFECYCLE_STAGES.includes(stage)) return { error: "Invalid lifecycle stage." };
   const { data: prev } = await supabase
     .from("contacts")
     .select("lifecycle_stage")

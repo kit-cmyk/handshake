@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Sparkles } from "lucide-react";
+import { FileText, Sparkles, Bookmark } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TRIGGER_LABELS } from "@/lib/workflows";
 import { WorkflowBuilder } from "../workflow-builder";
+import type { EmailSnippet } from "@/components/rich-email-editor";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "../templates";
 
 type Option = { id: string; name: string };
@@ -21,14 +23,23 @@ export function NewWorkflow({
   campaigns,
   workflows,
   mailboxes,
+  userTemplates = [],
+  initialTemplate = null,
+  emailTemplates,
 }: {
   segments: Option[];
   campaigns: Option[];
   workflows: Option[];
   mailboxes: MailboxOption[];
+  /** Workflow templates the org saved themselves. */
+  userTemplates?: WorkflowTemplate[];
+  /** When arriving via ?template=<id>, jump straight into the builder. */
+  initialTemplate?: WorkflowTemplate | null;
+  /** Email snippets for the send-email node's "Insert template" menu. */
+  emailTemplates?: EmailSnippet[];
 }) {
   const [chosen, setChosen] = React.useState<WorkflowTemplate | null | undefined>(
-    undefined
+    initialTemplate ?? undefined
   );
 
   if (chosen !== undefined) {
@@ -39,6 +50,7 @@ export function NewWorkflow({
         campaigns={campaigns}
         workflows={workflows}
         mailboxes={mailboxes}
+        emailTemplates={emailTemplates}
       />
     );
   }
@@ -80,6 +92,33 @@ export function NewWorkflow({
                 <Sparkles className="mt-0.5 size-5 text-primary" />
                 <div className="space-y-1">
                   <p className="font-medium">{t.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t.description}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {TRIGGER_LABELS[t.trigger_type].split(" — ")[0]}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </button>
+        ))}
+
+        {userTemplates.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setChosen(t)}
+            className="text-left"
+          >
+            <Card className="h-full transition-colors hover:border-primary">
+              <CardContent className="flex items-start gap-3 p-4">
+                <Bookmark className="mt-0.5 size-5 text-muted-foreground" />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{t.name}</p>
+                    <Badge variant="outline">Yours</Badge>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     {t.description}
                   </p>

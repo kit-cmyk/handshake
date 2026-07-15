@@ -122,6 +122,8 @@ function ReplyForm({
 
   React.useEffect(() => {
     if (state.ok) {
+      // Reacts to a form-submit result; the effect is required for the onDone() call.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBody("");
       onDone();
     }

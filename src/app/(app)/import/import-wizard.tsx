@@ -154,7 +154,10 @@ export function ImportWizard() {
   const validation = React.useMemo(() => {
     let valid = 0;
     let invalid = 0;
-    for (const r of mappedRows) (validateRow(target, r) ? invalid++ : valid++);
+    for (const r of mappedRows) {
+      if (validateRow(target, r)) invalid++;
+      else valid++;
+    }
     return { valid, invalid };
   }, [mappedRows, target]);
 

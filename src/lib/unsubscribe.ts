@@ -1,65 +1,22 @@
-// HMAC-signed unsubscribe token: `<base64url(contactId:campaignId)>.<sig>`, so
-// the public route can trust the encoded contact without a forgeable, guessable
-// link (a bare contact UUID previously let anyone craft a valid token).
+// Unsubscribe token. HMAC-signed (shared codec) so the public unsubscribe route
+// can trust the encoded contact + campaign without a DB lookup and without the
+// token being forgeable/enumerable — an attacker can no longer craft a valid
+// token for an arbitrary contact id.
 
-import crypto from "node:crypto";
+import { encodeToken, decodeToken } from "@/lib/crypto-token";
 
-function secret(): string {
-  return (
-    process.env.TRACKING_SECRET ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    "dev-tracking-secret"
-  );
-}
-
-function sign(body: string): string {
-  return crypto
-    .createHmac("sha256", secret())
-    .update(body)
-    .digest("base64url")
-    .slice(0, 24);
-}
+type UnsubPayload = { c: string; ca: string };
 
 export function makeUnsubToken(contactId: string, campaignId: string): string {
-  const body = Buffer.from(`${contactId}:${campaignId}`).toString("base64url");
-  return `${body}.${sign(body)}`;
-}
-
-function decodeBody(
-  body: string
-): { contactId: string; campaignId: string | null } | null {
-  try {
-    const [contactId, campaignId] = Buffer.from(body, "base64url")
-      .toString("utf8")
-      .split(":");
-    if (!contactId) return null;
-    return { contactId, campaignId: campaignId || null };
-  } catch {
-    return null;
-  }
+  return encodeToken({ c: contactId, ca: campaignId } satisfies UnsubPayload);
 }
 
 export function parseUnsubToken(
   token: string
 ): { contactId: string; campaignId: string | null } | null {
-  const dot = token.lastIndexOf(".");
-  if (dot > 0) {
-    // Signed token — verify before trusting.
-    const body = token.slice(0, dot);
-    const sig = token.slice(dot + 1);
-    const expected = sign(body);
-    if (
-      sig.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-    ) {
-      return decodeBody(body);
-    }
-    return null;
-  }
-  // Legacy unsigned token (bare base64url) still present in already-sent mail.
-  // Accepted so those unsubscribe links keep working; can be removed once old
-  // campaigns have aged out.
-  return decodeBody(token);
+  const p = decodeToken<UnsubPayload>(token);
+  if (!p || !p.c) return null;
+  return { contactId: p.c, campaignId: p.ca || null };
 }
 
 export function unsubUrl(contactId: string, campaignId: string): string {

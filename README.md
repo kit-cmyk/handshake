@@ -60,7 +60,8 @@ cp .env.example .env.local   # then fill in the values below
 
 # 3. Apply the database schema
 #    Run supabase/migrations/*.sql in order against your Supabase project
-#    (or use the Supabase CLI). See supabase/schema.sql for the full snapshot.
+#    (or use the Supabase CLI). The ordered migrations are the single source of
+#    truth for the schema.
 
 # 4. Run the app
 npm run dev                  # http://localhost:3000
@@ -110,8 +111,7 @@ src/
   components/     UI + feature components
   lib/            Supabase clients, Inngest functions, email, places, lifecycle…
 supabase/
-  migrations/     Ordered SQL migrations (source of truth for schema changes)
-  schema.sql      Full schema snapshot
+  migrations/     Ordered SQL migrations (source of truth for the schema)
   templates/      Branded auth email templates
 docs/             Product context, stack decision, architecture, DB schema, plan
 TODO.md           Running log of deferred work and future features

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Radar } from "lucide-react";
+import { Radar, Building2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
@@ -20,6 +20,24 @@ export function ProspectHistoryTable({ data }: { data: ScrapeJob[] }) {
             {new Date(getValue() as string).toLocaleString()}
           </span>
         ),
+      },
+      {
+        id: "kind",
+        header: "Type",
+        accessorFn: (r) => r.kind ?? "companies",
+        cell: ({ row }) => {
+          const people = row.original.kind === "contacts";
+          return (
+            <Badge variant="secondary" className="gap-1 capitalize">
+              {people ? (
+                <Users className="size-3" />
+              ) : (
+                <Building2 className="size-3" />
+              )}
+              {people ? "People" : "Companies"}
+            </Badge>
+          );
+        },
       },
       {
         id: "search",
@@ -47,10 +65,13 @@ export function ProspectHistoryTable({ data }: { data: ScrapeJob[] }) {
         enableSorting: false,
         cell: ({ row }) => {
           const j = row.original;
+          const people = j.kind === "contacts";
           return j.status === "completed" ? (
             <div className="flex flex-wrap gap-1">
-              <Badge variant="success">{j.imported} new</Badge>
-              {j.contacts > 0 && (
+              <Badge variant="success">
+                {j.imported} new {people ? "contacts" : "companies"}
+              </Badge>
+              {!people && j.contacts > 0 && (
                 <Badge variant="default">{j.contacts} contacts</Badge>
               )}
               {j.deduped > 0 && (

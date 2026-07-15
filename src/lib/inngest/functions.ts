@@ -1,10 +1,10 @@
 import { inngest } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   evaluateFilter,
   matchesDefinition,
   parseDefinition,
+  fetchAllEvaluable,
   EVALUABLE_SELECT,
   type EvaluableContact,
 } from "@/lib/segments";
@@ -30,12 +30,7 @@ import {
   evaluateBranch,
 } from "@/lib/workflows";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "@/lib/types";
-import {
-  nextSendTime,
-  localDayStartUtc,
-  ALWAYS_ON,
-  type SendWindow,
-} from "@/lib/schedule";
+import { nextSendTime, ALWAYS_ON, type SendWindow } from "@/lib/schedule";
 
 /** Read an org's configured send window (falls back to always-on). */
 async function loadSendWindow(
@@ -88,13 +83,7 @@ export const reevaluateSegments = inngest.createFunction(
     for (const seg of segments ?? []) {
       const change = await step.run(`reevaluate-${seg.id}`, async () => {
         // Page past the PostgREST row cap so membership isn't truncated.
-        const contacts = await fetchAllRows<EvaluableContact>((from, to) =>
-          admin
-            .from("contacts")
-            .select(EVALUABLE_SELECT)
-            .eq("org_id", seg.org_id)
-            .range(from, to)
-        );
+        const contacts = await fetchAllEvaluable(admin, seg.org_id);
 
         const matched = evaluateFilter(
           contacts,
@@ -292,35 +281,32 @@ export const campaignEngine = inngest.createFunction(
         await step.sleep(`wait-${i}`, `${s.wait_minutes}m`);
       }
 
-      // Best-effort daily send cap per mailbox: if today's sends have hit the
-      // mailbox limit, defer this send until the next UTC day (when the count
-      // resets). Re-check after each wait — a batch that all deferred to the same
-      // day boundary would otherwise wake together and send in one burst, blowing
-      // past the cap; re-checking rolls the overflow to the following day.
-      // Bounded so a persistently-over-cap mailbox can't wait forever.
+      // Daily send cap per mailbox. Atomically reserve a slot (see
+      // reserve_mailbox_send); if the mailbox has hit its limit for the day,
+      // sleep until the next UTC day and try again. The reservation is atomic in
+      // Postgres, so concurrent enrollment runs can't collectively exceed the
+      // cap. Protects sender reputation on large enrollments.
       if (ctx.mailbox && ctx.mailbox.daily_limit > 0) {
-        for (let attempt = 0; attempt < 7; attempt++) {
-          const waitMinutes = await step.run(
-            `cap-check-${i}-${attempt}`,
-            async () => {
-              const now = new Date();
-              // Reset the daily count at the org's local midnight, not UTC.
-              const startOfDay = localDayStartUtc(now, ctx.sendWindow.timezone);
-              const { count } = await admin
-                .from("events")
-                .select("id", { count: "exact", head: true })
-                .eq("org_id", ctx.orgId)
-                .eq("type", "sent")
-                .filter("metadata->>mailbox_id", "eq", ctx.mailbox!.id)
-                .gte("occurred_at", startOfDay.toISOString());
-              if ((count ?? 0) < ctx.mailbox!.daily_limit) return 0;
-              const nextDay = new Date(
-                startOfDay.getTime() + 24 * 60 * 60 * 1000
-              );
-              return Math.ceil((nextDay.getTime() - now.getTime()) / 60000);
-            }
-          );
-          if (waitMinutes <= 0) break;
+        for (let attempt = 0; attempt < 90; attempt++) {
+          const reserved = await step.run(`cap-reserve-${i}-${attempt}`, async () => {
+            const { data, error } = await admin.rpc("reserve_mailbox_send", {
+              p_org: ctx.orgId,
+              p_mailbox: ctx.mailbox!.id,
+              p_limit: ctx.mailbox!.daily_limit,
+            });
+            // Fail open on a counter error — never block a legitimate send.
+            if (error) return true;
+            return data as boolean;
+          });
+          if (reserved) break;
+          const waitMinutes = await step.run(`cap-wait-calc-${i}-${attempt}`, async () => {
+            const now = new Date();
+            const startOfDay = new Date(
+              Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+            );
+            const nextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+            return Math.max(1, Math.ceil((nextDay.getTime() - now.getTime()) / 60000));
+          });
           await step.sleep(`cap-wait-${i}-${attempt}`, `${waitMinutes}m`);
         }
       }

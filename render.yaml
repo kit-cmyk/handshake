@@ -1,0 +1,61 @@
+# Render Blueprint — deploys Handshake as a Node Web Service (NOT a static site).
+# This app uses server components, server actions, API routes, and middleware,
+# so it needs a persistent Node runtime (`next start`), not static hosting.
+#
+# Secrets are declared with `sync: false` — Render will NOT read their values
+# from this file (keeping them out of git). Set them in the Render dashboard, or
+# bulk-import the local `.env.render` file via Environment → "Add from .env".
+#
+# NOTE: NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time, so
+# they must be set before the first successful build. If the first blueprint
+# deploy builds before you've set them, set the values and trigger a redeploy.
+
+services:
+  - type: web
+    name: handshake
+    runtime: node
+    plan: starter
+    branch: main
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /login
+    envVars:
+      # Runtime version (Next 16 needs Node 20.9+).
+      - key: NODE_VERSION
+        value: "22"
+
+      # --- Required to boot & authenticate ---
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Set to this service's public URL, e.g. https://handshake.onrender.com
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+
+      # --- Secrets for tokened features (tracking, CRM OAuth, inbound email) ---
+      - key: TRACKING_SECRET
+        sync: false
+      - key: CRM_TOKEN_SECRET
+        sync: false
+      - key: EMAIL_WEBHOOK_SECRET
+        sync: false
+
+      # --- Optional / feature-gated (app falls back to mocks if unset) ---
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: PEOPLE_SEARCH_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_PROVIDER_API_KEY
+        sync: false
+      - key: REPLY_DOMAIN
+        sync: false
+      - key: GOOGLE_CALENDAR_ACCESS_TOKEN
+        sync: false
+      - key: SERVICETITAN_APP_KEY
+        sync: false

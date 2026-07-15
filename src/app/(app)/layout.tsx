@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar";
 import { HeaderSearch } from "@/components/header-search";
 import { UserMenu } from "@/components/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BulkTaskProvider } from "@/components/bulk-task";
 import { resolveAvatar } from "@/lib/avatar";
 import { signout } from "../(auth)/actions";
 
@@ -37,23 +38,25 @@ export default async function AppLayout({
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar orgs={orgs} activeId={org.id} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b bg-card px-6">
-          <Suspense fallback={<div className="h-9 w-56 lg:w-72" />}>
-            <HeaderSearch />
-          </Suspense>
-          <ThemeToggle />
-          <UserMenu
-            name={name}
-            email={email}
-            avatarSrc={avatarSrc}
-            signOutAction={signout}
-          />
-        </header>
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <BulkTaskProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar orgs={orgs} activeId={org.id} />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b bg-card px-6">
+            <Suspense fallback={<div className="h-9 w-56 lg:w-72" />}>
+              <HeaderSearch />
+            </Suspense>
+            <ThemeToggle />
+            <UserMenu
+              name={name}
+              email={email}
+              avatarSrc={avatarSrc}
+              signOutAction={signout}
+            />
+          </header>
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </BulkTaskProvider>
   );
 }

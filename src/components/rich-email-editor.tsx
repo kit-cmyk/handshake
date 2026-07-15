@@ -16,14 +16,37 @@ import {
   Link2,
   Image as ImageIcon,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+
+/** A reusable email snippet the editor can insert. */
+export type EmailSnippet = {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+};
 
 async function uploadImage(file: File): Promise<string> {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in to upload images.");
   const ext = (file.name.split(".").pop() || "png").toLowerCase();
-  const path = `${crypto.randomUUID()}.${ext}`;
+  // Upload into the uploader's own folder so the storage policy can scope
+  // writes/deletes per user (email-assets/<user_id>/...).
+  const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
     .from("email-assets")
     .upload(path, file, { contentType: file.type || "image/png" });
@@ -65,15 +88,27 @@ export function RichEmailEditor({
   value,
   onChange,
   placeholder = "Write your email… use {{first_name}}, {{company}} for merge tags.",
+  emailTemplates,
+  onApplyTemplate,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  /** When provided (and non-empty), shows an "Insert template" toolbar menu. */
+  emailTemplates?: EmailSnippet[];
+  /**
+   * Called when a template is picked. Use it to apply subject + body together.
+   * When omitted, only the body is inserted at the cursor.
+   */
+  onApplyTemplate?: (snippet: EmailSnippet) => void;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const onChangeRef = React.useRef(onChange);
-  onChangeRef.current = onChange;
+  // Keep the ref current without writing to it during render.
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   // Upload dropped/pasted image files, then insert at the current selection.
   const insertFiles = React.useCallback(
@@ -141,6 +176,14 @@ export function RichEmailEditor({
     } finally {
       setUploading(false);
     }
+  }
+
+  function applyTemplate(snippet: EmailSnippet) {
+    // Apply the body through the editor so it flows out via the normal onChange
+    // path (the editor doesn't re-read `value` after mount). The callback lets
+    // the parent apply the subject alongside it.
+    editor?.chain().focus().setContent(snippet.body).run();
+    onApplyTemplate?.(snippet);
   }
 
   function setLink() {
@@ -219,6 +262,38 @@ export function RichEmailEditor({
           className="hidden"
           onChange={onPickFile}
         />
+        {emailTemplates && emailTemplates.length > 0 && (
+          <>
+            <div className="mx-1 h-5 w-px bg-border" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title="Insert template"
+                  className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Sparkles className="size-4" /> Insert template
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                <DropdownMenuLabel>Email templates</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {emailTemplates.map((t) => (
+                  <DropdownMenuItem
+                    key={t.id}
+                    onSelect={() => applyTemplate(t)}
+                    className="flex flex-col items-start gap-0.5"
+                  >
+                    <span className="font-medium">{t.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t.subject}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
       </div>
       <div className="px-3 py-2 text-sm">
         <EditorContent editor={editor} />

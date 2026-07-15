@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { WorkflowBuilder } from "../../workflow-builder";
+import { loadEmailSnippets } from "@/lib/templates/queries";
 import { parseGraph, parseExitConfig, type Workflow } from "@/lib/workflows";
 import type { Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
@@ -27,6 +28,8 @@ export default async function EditWorkflowPage({
     graph: parseGraph(workflow.graph),
     exit_config: parseExitConfig(workflow.exit_config),
   } as Workflow;
+
+  const emailTemplates = await loadEmailSnippets(supabase, org.id);
 
   const [
     { data: segments },
@@ -89,6 +92,7 @@ export default async function EditWorkflowPage({
         campaigns={campaignOptions}
         workflows={workflowOptions}
         mailboxes={mailboxOptions}
+        emailTemplates={emailTemplates}
       />
     </div>
   );

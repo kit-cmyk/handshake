@@ -2,11 +2,35 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { NewWorkflow } from "./new-workflow";
+import type { WorkflowTemplate } from "../templates";
+import {
+  findTemplate,
+  loadEmailSnippets,
+  loadTemplatesByKind,
+} from "@/lib/templates/queries";
+import { isWorkflowTemplate, type Template } from "@/lib/templates/types";
 import type { Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
 
-export default async function NewWorkflowPage() {
+/** Adapt a library workflow template into the builder's WorkflowTemplate shape. */
+function toBuilderTemplate(t: Template): WorkflowTemplate | null {
+  if (!isWorkflowTemplate(t)) return null;
+  return {
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    trigger_type: t.content.trigger_type,
+    graph: t.content.graph,
+  };
+}
+
+export default async function NewWorkflowPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ template?: string }>;
+}) {
   const { supabase, org } = await requireContext();
+  const { template: templateId } = await searchParams;
 
   const [
     { data: segments },
@@ -50,6 +74,22 @@ export default async function NewWorkflowPage() {
     displayName: m.display_name,
   }));
 
+  // Org-saved workflow templates for the picker, plus a deep-linked selection.
+  const libraryTemplates = await loadTemplatesByKind(supabase, org.id, "workflow");
+  const userTemplates = libraryTemplates
+    .filter((t) => t.source === "org")
+    .map(toBuilderTemplate)
+    .filter((t): t is WorkflowTemplate => t !== null);
+
+  const initialTemplate = templateId
+    ? toBuilderTemplate(
+        (await findTemplate(supabase, org.id, templateId, "workflow")) ??
+          ({} as Template)
+      )
+    : null;
+
+  const emailTemplates = await loadEmailSnippets(supabase, org.id);
+
   return (
     <div className="space-y-6">
       <Link
@@ -69,6 +109,9 @@ export default async function NewWorkflowPage() {
         campaigns={campaignOptions}
         workflows={workflowOptions}
         mailboxes={mailboxOptions}
+        userTemplates={userTemplates}
+        initialTemplate={initialTemplate}
+        emailTemplates={emailTemplates}
       />
     </div>
   );

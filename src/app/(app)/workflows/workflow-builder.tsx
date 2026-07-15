@@ -43,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RichEmailEditor } from "@/components/rich-email-editor";
+import { RichEmailEditor, type EmailSnippet } from "@/components/rich-email-editor";
 import {
   Select,
   SelectContent,
@@ -176,6 +176,7 @@ export function WorkflowBuilder({
   campaigns,
   workflows,
   mailboxes,
+  emailTemplates,
 }: {
   workflow?: Workflow;
   template?: WorkflowTemplate;
@@ -183,6 +184,7 @@ export function WorkflowBuilder({
   campaigns: Option[];
   workflows: Option[];
   mailboxes: MailboxOption[];
+  emailTemplates?: EmailSnippet[];
 }) {
   const [state, formAction, pending] = useActionState<WorkflowState, FormData>(
     saveWorkflow,
@@ -573,6 +575,9 @@ export function WorkflowBuilder({
     triggerType === "manual" || triggerType === "segment_entry";
   React.useEffect(() => {
     if (!usesSegmentTrigger || !activeSegmentId) {
+      // Data-fetching effect (segment dry-run count); resetting before the async
+      // fetch is intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSegCount(null);
       return;
     }
@@ -1240,6 +1245,10 @@ export function WorkflowBuilder({
                     key={`email-${selected?.id}`}
                     value={String(cfg.body ?? "")}
                     onChange={(html) => updateSelectedConfig({ body: html })}
+                    emailTemplates={emailTemplates}
+                    onApplyTemplate={(snip) =>
+                      updateSelectedConfig({ subject: snip.subject })
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
                     Personalise with {MERGE_TAGS.map((t) => `{{${t}}}`).join(", ")}.

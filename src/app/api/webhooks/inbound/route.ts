@@ -7,6 +7,7 @@ import { shouldStopOnReply } from "@/lib/campaigns/reply";
 import { notifyReplyReceived } from "@/lib/integrations/notify";
 import { buildInboundMessage } from "@/lib/inbox/inbound";
 import { inngest } from "@/lib/inngest/client";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 // Inbound-reply webhook. A mail provider (inbound parse) or IMAP poller posts
 // the reply here. We identify the enrollment from the signed token in the
@@ -91,6 +92,13 @@ async function captureMessage(
 }
 
 export async function POST(request: Request) {
+  const { allowed, retryAfter } = rateLimit(`wh-inbound:${clientIp(request)}`, 600, 60);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate limited" },
+      { status: 429, headers: { "retry-after": String(retryAfter) } }
+    );
+  }
   if (!verifyWebhookSecret(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

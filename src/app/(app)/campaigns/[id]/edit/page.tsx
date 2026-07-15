@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { CampaignWizard } from "../../campaign-wizard";
 import { loadCampaignContacts } from "../../contact-options";
+import { loadEmailSnippets } from "@/lib/templates/queries";
 import type { Campaign, CampaignStep, Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
 
@@ -44,6 +45,8 @@ export default async function EditCampaignPage({
 
   if (!campaign) notFound();
   const c = campaign as Campaign;
+
+  const emailTemplates = await loadEmailSnippets(supabase, org.id);
 
   // For a list audience, the attached segment is auto-managed; its members are
   // the currently-selected contacts, so the wizard can re-check them.
@@ -107,6 +110,7 @@ export default async function EditCampaignPage({
         contacts={contacts}
         initialContactIds={initialContactIds}
         defaultTestEmail={userEmail}
+        emailTemplates={emailTemplates}
       />
     </div>
   );

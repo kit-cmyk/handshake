@@ -13,6 +13,9 @@ import { useTheme } from "@/components/theme-provider";
 export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, toggleTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
+  // Intentional client-mount guard to avoid a theme hydration mismatch; the
+  // one-shot setState on mount is the canonical pattern for this.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setMounted(true), []);
 
   // Until mounted, the resolved theme is unknown to the server, so keep the

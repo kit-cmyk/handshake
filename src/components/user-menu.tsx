@@ -1,5 +1,6 @@
 "use client";
 
+import { useTransition } from "react";
 import Link from "next/link";
 import { LogOut, Settings, User } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ export function UserMenu({
   avatarSrc: string;
   signOutAction: () => void | Promise<void>;
 }) {
+  const [isSigningOut, startSignOut] = useTransition();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -54,13 +56,20 @@ export function UserMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <form action={signOutAction}>
-          <DropdownMenuItem asChild>
-            <button type="submit" className="w-full cursor-pointer">
-              <LogOut /> Sign out
-            </button>
-          </DropdownMenuItem>
-        </form>
+        <DropdownMenuItem
+          disabled={isSigningOut}
+          className="cursor-pointer"
+          // Prevent Radix from closing (and unmounting) the menu before the
+          // action fires; invoke the Server Action from a client transition.
+          onSelect={(e) => {
+            e.preventDefault();
+            startSignOut(() => {
+              void signOutAction();
+            });
+          }}
+        >
+          <LogOut /> Sign out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

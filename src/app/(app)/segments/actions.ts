@@ -4,11 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireContext } from "@/lib/context";
-import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   parseDefinition,
   evaluateFilter,
-  EVALUABLE_SELECT,
+  fetchAllEvaluable,
   type EvaluableContact,
   type SegmentDefinition,
 } from "@/lib/segments";
@@ -27,16 +26,8 @@ async function fetchEvaluable(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<EvaluableContact[]> {
-  // Must see every contact — page past the PostgREST row cap so segment
-  // membership isn't silently truncated on large books.
-  const rows = await fetchAllRows<EvaluableContact>((from, to) =>
-    supabase
-      .from("contacts")
-      .select(EVALUABLE_SELECT)
-      .eq("org_id", orgId)
-      .range(from, to)
-  );
-  return rows;
+  // Page past the 1000-row cap so previews/snapshots see every contact.
+  return fetchAllEvaluable(supabase, orgId);
 }
 
 /** Resolve a definition and replace the segment's cached membership rows. */
@@ -184,6 +175,24 @@ export async function deleteSegment(id: string): Promise<SegmentState> {
   if (error) return { error: error.message };
   revalidatePath("/segments");
   return { ok: true };
+}
+
+/**
+ * Delete a batch of segments in a single query. Called once per chunk by the
+ * bulk-task runner; the client refreshes the route once at the end, so this
+ * skips per-call revalidation.
+ */
+export async function bulkDeleteSegments(
+  ids: string[]
+): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
+  if (!ids.length) return { ok: true, deleted: 0 };
+  const { supabase } = await requireContext();
+  const { error, count } = await supabase
+    .from("segments")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, deleted: count ?? ids.length };
 }
 
 export type SegmentImportResult = {

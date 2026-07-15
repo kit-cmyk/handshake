@@ -154,7 +154,8 @@ export async function signout() {
   redirect("/login");
 }
 
-export async function signInWithGoogle(next?: string) {
+export async function signInWithGoogle(formData: FormData) {
+  const next = safeNext(formData.get("next"));
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
