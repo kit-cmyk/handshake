@@ -32,7 +32,7 @@ import { BulkDeleteButton } from "@/components/bulk-delete-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { SegmentSheet } from "./segment-sheet";
-import { deleteSegment, refreshSnapshot } from "./actions";
+import { bulkDeleteSegments, deleteSegment, refreshSnapshot } from "./actions";
 import { parseDefinition, type Segment } from "@/lib/segments";
 
 export type SegmentRow = {
@@ -181,7 +181,7 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
       bulkActions={({ rows, clear }) => (
         <BulkDeleteButton
           ids={rows.map((r) => r.id)}
-          action={deleteSegment}
+          action={bulkDeleteSegments}
           onDone={clear}
           noun="segment"
         />

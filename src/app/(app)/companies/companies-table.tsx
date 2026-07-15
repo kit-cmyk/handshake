@@ -23,7 +23,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { CompanyDialog } from "./company-dialog";
 import { CompanySheet } from "./company-sheet";
-import { deleteCompany } from "./actions";
+import { bulkDeleteCompanies, deleteCompany } from "./actions";
 import type { Company } from "@/lib/types";
 
 export function CompaniesTable({ data }: { data: Company[] }) {
@@ -129,7 +129,7 @@ export function CompaniesTable({ data }: { data: Company[] }) {
       bulkActions={({ rows, clear }) => (
         <BulkDeleteButton
           ids={rows.map((r) => r.id)}
-          action={deleteCompany}
+          action={bulkDeleteCompanies}
           onDone={clear}
           noun="company"
         />
