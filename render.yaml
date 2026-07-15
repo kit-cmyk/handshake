@@ -59,5 +59,3 @@ services:
         sync: false
       - key: SERVICETITAN_APP_KEY
         sync: false
-      - key: NEXT_PUBLIC_ENABLE_GOOGLE_AUTH
-        sync: false

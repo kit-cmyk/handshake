@@ -23,8 +23,6 @@ type Props = {
   next?: string;
 };
 
-const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
-
 export function AuthForm({ mode, action, next }: Props) {
   const [state, formAction, pending] = useActionState(action, {});
   const [showPw, setShowPw] = React.useState(false);
@@ -43,26 +41,24 @@ export function AuthForm({ mode, action, next }: Props) {
         </CardDescription>
       </CardHeader>
 
-      {GOOGLE_ENABLED && (
-        <CardContent className="px-0 pb-0">
-          {/* Form action so the OAuth redirect is driven by React's action
-              mechanism — invoking the redirecting server action from a bare
-              onClick is unreliable in Next. */}
-          <form action={signInWithGoogle}>
-            {next && <input type="hidden" name="next" value={next} />}
-            <Button type="submit" variant="outline" className="w-full">
-              <GoogleIcon className="size-4" />
-              {isLogin ? "Sign in with Google" : "Sign up with Google"}
-            </Button>
-          </form>
-          <div className="relative my-4 text-center">
-            <span className="relative z-10 bg-background px-2 text-xs text-muted-foreground">
-              or
-            </span>
-            <span className="absolute inset-x-0 top-1/2 -z-0 h-px bg-border" />
-          </div>
-        </CardContent>
-      )}
+      <CardContent className="px-0 pb-0">
+        {/* Form action so the OAuth redirect is driven by React's action
+            mechanism — invoking the redirecting server action from a bare
+            onClick is unreliable in Next. */}
+        <form action={signInWithGoogle}>
+          {next && <input type="hidden" name="next" value={next} />}
+          <Button type="submit" variant="outline" className="w-full">
+            <GoogleIcon className="size-4" />
+            {isLogin ? "Sign in with Google" : "Sign up with Google"}
+          </Button>
+        </form>
+        <div className="relative my-4 text-center">
+          <span className="relative z-10 bg-background px-2 text-xs text-muted-foreground">
+            or
+          </span>
+          <span className="absolute inset-x-0 top-1/2 -z-0 h-px bg-border" />
+        </div>
+      </CardContent>
 
       <form action={formAction}>
         <CardContent className="space-y-4 px-0">
