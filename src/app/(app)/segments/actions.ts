@@ -180,6 +180,24 @@ export async function deleteSegment(id: string): Promise<SegmentState> {
   return { ok: true };
 }
 
+/**
+ * Delete a batch of segments in a single query. Called once per chunk by the
+ * bulk-task runner; the client refreshes the route once at the end, so this
+ * skips per-call revalidation.
+ */
+export async function bulkDeleteSegments(
+  ids: string[]
+): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
+  if (!ids.length) return { ok: true, deleted: 0 };
+  const { supabase } = await requireContext();
+  const { error, count } = await supabase
+    .from("segments")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, deleted: count ?? ids.length };
+}
+
 export type SegmentImportResult = {
   ok?: boolean;
   error?: string;

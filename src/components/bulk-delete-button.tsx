@@ -1,13 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useBulkTask } from "@/components/bulk-task";
 
 /**
- * Deletes each id via the given server action (after confirmation), then
- * refreshes. Used as a bulk action inside DataTable toolbars.
+ * Confirms, then hands the selected ids to the background bulk-task runner,
+ * which deletes them in chunks (one server round-trip per chunk) and shows a
+ * dockable, cancellable progress toast. Used inside DataTable toolbars.
  */
 export function BulkDeleteButton({
   ids,
@@ -16,12 +17,13 @@ export function BulkDeleteButton({
   noun = "item",
 }: {
   ids: string[];
-  action: (id: string) => Promise<unknown>;
+  /** Deletes an entire chunk of ids in a single server call. */
+  action: (ids: string[]) => Promise<{ error?: string } | unknown>;
   onDone?: () => void;
   /** Singular noun, e.g. "contact". */
   noun?: string;
 }) {
-  const router = useRouter();
+  const bulk = useBulkTask();
   const count = ids.length;
   const label = count === 1 ? noun : `${noun}s`;
 
@@ -32,6 +34,7 @@ export function BulkDeleteButton({
           variant="outline"
           size="sm"
           className="h-8 text-destructive hover:text-destructive"
+          disabled={bulk.running}
         >
           <Trash2 className="size-4" /> Delete
         </Button>
@@ -39,11 +42,17 @@ export function BulkDeleteButton({
       title={`Delete ${count} ${label}?`}
       description="This permanently deletes the selected records. This can't be undone."
       confirmLabel={`Delete ${count} ${label}`}
-      pendingLabel="Deleting…"
-      onConfirm={async () => {
-        for (const id of ids) await action(id);
-        onDone?.();
-        router.refresh();
+      pendingLabel="Starting…"
+      onConfirm={() => {
+        // Fire and forget: the dialog closes and the docked task UI takes over.
+        void bulk.run({
+          ids,
+          noun,
+          action,
+          verb: "Deleting",
+          doneVerb: "Deleted",
+          onDone,
+        });
       }}
     />
   );

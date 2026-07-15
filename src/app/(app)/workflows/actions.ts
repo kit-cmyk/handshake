@@ -283,6 +283,24 @@ export async function deleteWorkflow(id: string): Promise<WorkflowState> {
 }
 
 /**
+ * Delete a batch of workflows in a single query. Called once per chunk by the
+ * bulk-task runner; the client refreshes the route once at the end, so this
+ * skips per-call revalidation.
+ */
+export async function bulkDeleteWorkflows(
+  ids: string[]
+): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
+  if (!ids.length) return { ok: true, deleted: 0 };
+  const { supabase } = await requireContext();
+  const { error, count } = await supabase
+    .from("workflows")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, deleted: count ?? ids.length };
+}
+
+/**
  * Clone a workflow into a fresh draft: copies the trigger, exit criteria,
  * mailbox, and graph, but starts with no runs and a "(copy)" name so it can be
  * edited and set live independently.

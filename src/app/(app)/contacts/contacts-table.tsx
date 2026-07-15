@@ -35,7 +35,7 @@ import { EmptyState } from "@/components/empty-state";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { ContactDialog } from "./contact-dialog";
 import { ContactSheet } from "./contact-sheet";
-import { deleteContact } from "./actions";
+import { bulkDeleteContacts, deleteContact } from "./actions";
 import {
   contactName,
   LIFECYCLE_LABELS,
@@ -268,7 +268,7 @@ export function ContactsTable({
       bulkActions={({ rows, clear }) => (
         <BulkDeleteButton
           ids={rows.map((r) => r.id)}
-          action={deleteContact}
+          action={bulkDeleteContacts}
           onDone={clear}
           noun="contact"
         />
