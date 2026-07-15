@@ -59,6 +59,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
+  // Idempotency for terminal events: providers retry webhooks, and re-processing
+  // a reply/bounce would re-fire Slack notifications, re-enqueue the
+  // `contact/replied` workflow trigger, and duplicate the event row. If we've
+  // already recorded this outcome for this message, acknowledge and stop.
+  // (opened/clicked/delivered are safe to record repeatedly — the funnel dedups
+  // by contact.)
+  if (type === "replied" || type === "bounced") {
+    const { data: prior } = await admin
+      .from("events")
+      .select("id")
+      .eq("type", type)
+      .filter("metadata->>message_id", "eq", message_id)
+      .limit(1)
+      .maybeSingle();
+    if (prior) return NextResponse.json({ ok: true, duplicate: true });
+  }
+
   await admin.from("events").insert({
     org_id: sent.org_id,
     type,

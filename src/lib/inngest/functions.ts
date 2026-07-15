@@ -1,5 +1,6 @@
 import { inngest } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   evaluateFilter,
   matchesDefinition,
@@ -16,7 +17,7 @@ import {
   replyAddress,
   type TrackContext,
 } from "@/lib/email/tracking";
-import { unsubUrl } from "@/lib/unsubscribe";
+import { unsubUrl, unsubHeaders } from "@/lib/unsubscribe";
 import { notifyCampaignFinished } from "@/lib/integrations/notify";
 import { enrollContacts } from "@/lib/campaigns/enroll";
 import {
@@ -29,6 +30,31 @@ import {
   evaluateBranch,
 } from "@/lib/workflows";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "@/lib/types";
+import {
+  nextSendTime,
+  localDayStartUtc,
+  ALWAYS_ON,
+  type SendWindow,
+} from "@/lib/schedule";
+
+/** Read an org's configured send window (falls back to always-on). */
+async function loadSendWindow(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string
+): Promise<SendWindow> {
+  const { data } = await admin
+    .from("organizations")
+    .select("send_timezone, send_window_start, send_window_end, send_days")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!data) return ALWAYS_ON;
+  return {
+    timezone: (data.send_timezone as string) ?? "UTC",
+    startHour: (data.send_window_start as number) ?? 0,
+    endHour: (data.send_window_end as number) ?? 24,
+    days: (data.send_days as number[]) ?? ALWAYS_ON.days,
+  };
+}
 
 /**
  * Smoke-test function proving the durable job engine is wired end-to-end.
@@ -61,13 +87,17 @@ export const reevaluateSegments = inngest.createFunction(
     let processed = 0;
     for (const seg of segments ?? []) {
       const change = await step.run(`reevaluate-${seg.id}`, async () => {
-        const { data: contacts } = await admin
-          .from("contacts")
-          .select(EVALUABLE_SELECT)
-          .eq("org_id", seg.org_id);
+        // Page past the PostgREST row cap so membership isn't truncated.
+        const contacts = await fetchAllRows<EvaluableContact>((from, to) =>
+          admin
+            .from("contacts")
+            .select(EVALUABLE_SELECT)
+            .eq("org_id", seg.org_id)
+            .range(from, to)
+        );
 
         const matched = evaluateFilter(
-          (contacts ?? []) as unknown as EvaluableContact[],
+          contacts,
           parseDefinition(seg.definition)
         );
         const matchedIds = new Set(matched.map((c) => c.id));
@@ -142,6 +172,28 @@ export const campaignEngine = inngest.createFunction(
     id: "campaign-enrollment",
     triggers: [{ event: "campaign/enrollment.started" }],
     concurrency: { limit: 20 },
+    // One live run per enrollment. Pausing a campaign leaves its run sleeping in
+    // a wait/cap step; resuming re-emits `enrollment.started` for every active
+    // enrollment. Without this, the resume spawns a *second* run alongside the
+    // still-sleeping original and the contact receives every remaining step
+    // twice. "skip" drops the duplicate while a run is still in progress; if the
+    // original already woke and stopped, no run is active so the re-emit starts a
+    // fresh one from current_step. Also guards double resume-clicks.
+    singleton: { key: "event.data.enrollmentId", mode: "skip" },
+    // If a step exhausts its retries, flip the enrollment to a terminal state so
+    // it stops rather than sitting 'active' with current_step frozen forever.
+    onFailure: async ({ event }) => {
+      const enrollmentId = event.data.event.data?.enrollmentId as
+        | string
+        | undefined;
+      if (!enrollmentId) return;
+      const admin = createAdminClient();
+      await admin
+        .from("campaign_enrollments")
+        .update({ status: "failed" })
+        .eq("id", enrollmentId)
+        .eq("status", "active");
+    },
   },
   async ({ event, step }) => {
     const admin = createAdminClient();
@@ -185,6 +237,7 @@ export const campaignEngine = inngest.createFunction(
           .single();
         mailbox = data;
       }
+      const sendWindow = await loadSendWindow(admin, enr.org_id as string);
       return {
         orgId: enr.org_id as string,
         campaignId: enr.campaign_id as string,
@@ -200,6 +253,7 @@ export const campaignEngine = inngest.createFunction(
         }[],
         contact: contact as LoadedContact | null,
         mailbox,
+        sendWindow,
       };
     });
 
@@ -240,35 +294,51 @@ export const campaignEngine = inngest.createFunction(
 
       // Best-effort daily send cap per mailbox: if today's sends have hit the
       // mailbox limit, defer this send until the next UTC day (when the count
-      // resets). Protects sender reputation on large enrollments.
+      // resets). Re-check after each wait — a batch that all deferred to the same
+      // day boundary would otherwise wake together and send in one burst, blowing
+      // past the cap; re-checking rolls the overflow to the following day.
+      // Bounded so a persistently-over-cap mailbox can't wait forever.
       if (ctx.mailbox && ctx.mailbox.daily_limit > 0) {
-        const waitMinutes = await step.run(`cap-check-${i}`, async () => {
-          const now = new Date();
-          const startOfDay = new Date(
-            Date.UTC(
-              now.getUTCFullYear(),
-              now.getUTCMonth(),
-              now.getUTCDate()
-            )
+        for (let attempt = 0; attempt < 7; attempt++) {
+          const waitMinutes = await step.run(
+            `cap-check-${i}-${attempt}`,
+            async () => {
+              const now = new Date();
+              // Reset the daily count at the org's local midnight, not UTC.
+              const startOfDay = localDayStartUtc(now, ctx.sendWindow.timezone);
+              const { count } = await admin
+                .from("events")
+                .select("id", { count: "exact", head: true })
+                .eq("org_id", ctx.orgId)
+                .eq("type", "sent")
+                .filter("metadata->>mailbox_id", "eq", ctx.mailbox!.id)
+                .gte("occurred_at", startOfDay.toISOString());
+              if ((count ?? 0) < ctx.mailbox!.daily_limit) return 0;
+              const nextDay = new Date(
+                startOfDay.getTime() + 24 * 60 * 60 * 1000
+              );
+              return Math.ceil((nextDay.getTime() - now.getTime()) / 60000);
+            }
           );
-          const { count } = await admin
-            .from("events")
-            .select("id", { count: "exact", head: true })
-            .eq("org_id", ctx.orgId)
-            .eq("type", "sent")
-            .filter("metadata->>mailbox_id", "eq", ctx.mailbox!.id)
-            .gte("occurred_at", startOfDay.toISOString());
-          if ((count ?? 0) < ctx.mailbox!.daily_limit) return 0;
-          const nextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-          return Math.ceil((nextDay.getTime() - now.getTime()) / 60000);
-        });
-        if (waitMinutes > 0) {
-          await step.sleep(`cap-wait-${i}`, `${waitMinutes}m`);
+          if (waitMinutes <= 0) break;
+          await step.sleep(`cap-wait-${i}-${attempt}`, `${waitMinutes}m`);
         }
       }
 
-      const outcome = await step.run(`send-${i}`, async () => {
-        // Re-check state after any delay.
+      // Respect the org's send window (timezone + quiet hours / weekdays): if
+      // now falls outside it, sleep until the next open slot before sending.
+      const windowWaitUntil = await step.run(`window-check-${i}`, async () => {
+        const target = nextSendTime(new Date(), ctx.sendWindow);
+        return target.getTime() > Date.now() ? target.toISOString() : null;
+      });
+      if (windowWaitUntil) {
+        await step.sleepUntil(`window-wait-${i}`, new Date(windowWaitUntil));
+      }
+
+      // Pre-send gate: re-check enrollment/campaign status + suppressions after
+      // any delay. Read-only (plus the unsubscribe short-circuit), so retrying
+      // it is safe and never sends.
+      const gate = await step.run(`gate-${i}`, async () => {
         const { data: enr } = await admin
           .from("campaign_enrollments")
           .select("status")
@@ -299,7 +369,18 @@ export const campaignEngine = inngest.createFunction(
             .eq("id", enrollmentId);
           return { stop: true };
         }
+        return { stop: false };
+      });
 
+      if (gate.stop) return { stopped: true, at: i };
+
+      // Isolate the non-idempotent provider send in its own step. Inngest
+      // memoizes a step's result once it succeeds, so a failure in the
+      // bookkeeping steps below only retries *those* — it can never re-send this
+      // email. (A throw inside this step itself still retries the send, but the
+      // ordinary transient-DB-error case that drove duplicate sends is gone.)
+      const res = await step.run(`send-${i}`, async () => {
+        const email = ctx.contact!.email!;
         const track: TrackContext = {
           orgId: ctx.orgId,
           contactId: ctx.contact!.id,
@@ -319,14 +400,17 @@ export const campaignEngine = inngest.createFunction(
             track
           )
         );
-        const res = await getEmailProvider().send({
+        return getEmailProvider().send({
           from,
           to: email,
           subject,
           html,
           replyTo: replyAddress(track, enrollmentId),
+          headers: unsubHeaders(ctx.contact!.id, ctx.campaignId),
         });
+      });
 
+      await step.run(`record-${i}`, async () => {
         await admin.from("events").insert({
           org_id: ctx.orgId,
           type: res.status === "sent" ? "sent" : "failed",
@@ -339,16 +423,14 @@ export const campaignEngine = inngest.createFunction(
             mailbox_id: ctx.mailbox?.id ?? null,
           },
         });
+      });
 
+      await step.run(`advance-${i}`, async () => {
         await admin
           .from("campaign_enrollments")
           .update({ current_step: i + 1 })
           .eq("id", enrollmentId);
-
-        return { stop: false };
       });
-
-      if (outcome.stop) return { stopped: true, at: i };
     }
 
     await step.run("complete", async () => {
@@ -386,6 +468,22 @@ export const workflowRun = inngest.createFunction(
     id: "workflow-run",
     triggers: [{ event: "workflow/run.started" }],
     concurrency: { limit: 20 },
+    // One live run per workflow_run row — a resumed/re-triggered run must not
+    // execute alongside a still-sleeping original (same double-send hazard as
+    // the campaign engine).
+    singleton: { key: "event.data.runId", mode: "skip" },
+    // Terminal-fail a run whose step ran out of retries so it doesn't sit
+    // 'active' with current_node frozen forever.
+    onFailure: async ({ event }) => {
+      const runId = event.data.event.data?.runId as string | undefined;
+      if (!runId) return;
+      const admin = createAdminClient();
+      await admin
+        .from("workflow_runs")
+        .update({ status: "failed", ended_at: new Date().toISOString() })
+        .eq("id", runId)
+        .eq("status", "active");
+    },
   },
   async ({ event, step }) => {
     const admin = createAdminClient();
@@ -408,7 +506,8 @@ export const workflowRun = inngest.createFunction(
         .select(EVALUABLE_SELECT)
         .eq("id", run.contact_id)
         .single();
-      return { run, wf, contact };
+      const sendWindow = await loadSendWindow(admin, run.org_id as string);
+      return { run, wf, contact, sendWindow };
     });
 
     if (!ctx || !ctx.run || !ctx.wf || !ctx.contact) return { skipped: true };
@@ -551,6 +650,18 @@ export const workflowRun = inngest.createFunction(
           .single();
 
         let branch: boolean | undefined;
+        // When set, this node needs an email sent. The actual provider send is
+        // deferred to an isolated step below so a retry of the bookkeeping can
+        // never re-send (see the campaign engine for the same pattern).
+        let sendPayload:
+          | {
+              from: string;
+              to: string;
+              subject: string;
+              html: string;
+              headers: Record<string, string>;
+            }
+          | null = null;
         try {
           switch (node.data.action) {
             case "send_email": {
@@ -590,20 +701,13 @@ export const workflowRun = inngest.createFunction(
                     unsubUrl(contact.id, "")
                   )
                 );
-                const res = await getEmailProvider().send({
+                sendPayload = {
                   from,
                   to: contact.email,
                   subject,
                   html,
-                });
-                await admin.from("events").insert({
-                  org_id: orgId,
-                  type: res.status === "sent" ? "sent" : "failed",
-                  contact_id: contact.id,
-                  workflow_id: workflowId,
-                  workflow_node_id: node.id,
-                  metadata: { message_id: res.id, error: res.error ?? null },
-                });
+                  headers: unsubHeaders(contact.id, ""),
+                };
               }
               break;
             }
@@ -675,7 +779,10 @@ export const workflowRun = inngest.createFunction(
                   admin,
                   orgId,
                   targetId,
-                  [contact.id]
+                  [contact.id],
+                  // Bound A→B→A move loops: don't re-move a contact into a
+                  // workflow they ran in the last hour.
+                  { cooldownMinutes: WORKFLOW_REENROLL_COOLDOWN_MIN }
                 );
                 if (movedRunIds.length) {
                   await inngest.send(
@@ -726,10 +833,14 @@ export const workflowRun = inngest.createFunction(
               break;
             }
           }
-          await admin
-            .from("workflow_run_steps")
-            .update({ status: "completed", completed_at: new Date().toISOString() })
-            .eq("id", rs?.id);
+          // For a pending send, defer marking the step complete until after the
+          // isolated send step succeeds.
+          if (!sendPayload) {
+            await admin
+              .from("workflow_run_steps")
+              .update({ status: "completed", completed_at: new Date().toISOString() })
+              .eq("id", rs?.id);
+          }
         } catch (e) {
           await admin
             .from("workflow_run_steps")
@@ -745,6 +856,19 @@ export const workflowRun = inngest.createFunction(
           node.data.action === "branch"
             ? nextNodeId(graph, node.id, branch)
             : nextNodeId(graph, node.id);
+
+        // Defer advancing current_node when a send is pending — the send +
+        // record steps below own that transition so the node isn't marked done
+        // until the email has actually gone out.
+        if (sendPayload) {
+          return {
+            stop: false,
+            next,
+            send: sendPayload,
+            rsId: (rs?.id as string | undefined) ?? null,
+          };
+        }
+
         await admin
           .from("workflow_runs")
           .update({ current_node: next })
@@ -753,6 +877,53 @@ export const workflowRun = inngest.createFunction(
       });
 
       if (outcome.stop) return { stopped: true };
+
+      // Isolated, non-idempotent send. Once it succeeds Inngest memoizes it, so
+      // a failure in the record step only retries the record — never the send.
+      if ("send" in outcome && outcome.send) {
+        // Respect the org's send window before dispatching the email.
+        const windowWaitUntil = await step.run(
+          `node-window-${node.id}`,
+          async () => {
+            const target = nextSendTime(new Date(), ctx.sendWindow);
+            return target.getTime() > Date.now() ? target.toISOString() : null;
+          }
+        );
+        if (windowWaitUntil) {
+          await step.sleepUntil(
+            `node-window-wait-${node.id}`,
+            new Date(windowWaitUntil)
+          );
+        }
+
+        const res = await step.run(`node-send-${node.id}`, async () =>
+          getEmailProvider().send(outcome.send)
+        );
+        await step.run(`node-record-${node.id}`, async () => {
+          await admin.from("events").insert({
+            org_id: orgId,
+            type: res.status === "sent" ? "sent" : "failed",
+            contact_id: contact.id,
+            workflow_id: workflowId,
+            workflow_node_id: node.id,
+            metadata: { message_id: res.id, error: res.error ?? null },
+          });
+          if (outcome.rsId) {
+            await admin
+              .from("workflow_run_steps")
+              .update({
+                status: "completed",
+                completed_at: new Date().toISOString(),
+              })
+              .eq("id", outcome.rsId);
+          }
+          await admin
+            .from("workflow_runs")
+            .update({ current_node: outcome.next })
+            .eq("id", runId);
+        });
+      }
+
       current = outcome.next ?? null;
     }
 
@@ -835,24 +1006,60 @@ export const workflowSegmentEntry = inngest.createFunction(
 /**
  * Enroll a set of contacts into a workflow, skipping any that already have an
  * active run (the DB also enforces this via a partial unique index). Returns the
- * newly-created run ids. Shared by the reply and stage-change trigger handlers.
+ * newly-created run ids. Shared by every trigger handler.
+ *
+ * Options bound re-enrollment beyond the active-run guard:
+ * - `cooldownMinutes`: also skip contacts who *started* a run for this workflow
+ *   within the window. Bounds tight cross-workflow loops (A→B→A move chains,
+ *   set_lifecycle → stage_change ping-pong) that would otherwise re-enroll
+ *   instantly because each run completes before the next begins.
+ * - `oncePerContact`: skip contacts who have *ever* run this workflow. Used for
+ *   engagement triggers, where a chatty open/click pixel (email clients reload
+ *   tracked mail for weeks) must not spin up a fresh run on every reload.
  */
 async function enrollContactsInWorkflow(
   admin: ReturnType<typeof createAdminClient>,
   orgId: string,
   workflowId: string,
-  contactIds: string[]
+  contactIds: string[],
+  opts: { cooldownMinutes?: number; oncePerContact?: boolean } = {}
 ): Promise<string[]> {
   if (!contactIds.length) return [];
-  const { data: active } = await admin
-    .from("workflow_runs")
-    .select("contact_id")
-    .eq("workflow_id", workflowId)
-    .eq("status", "active");
-  const activeSet = new Set(
-    (active ?? []).map((r) => (r as { contact_id: string }).contact_id)
-  );
-  const eligible = contactIds.filter((id) => !activeSet.has(id));
+
+  const blocked = new Set<string>();
+
+  if (opts.oncePerContact) {
+    const { data: ever } = await admin
+      .from("workflow_runs")
+      .select("contact_id")
+      .eq("workflow_id", workflowId)
+      .in("contact_id", contactIds);
+    for (const r of ever ?? [])
+      blocked.add((r as { contact_id: string }).contact_id);
+  } else {
+    const { data: active } = await admin
+      .from("workflow_runs")
+      .select("contact_id")
+      .eq("workflow_id", workflowId)
+      .eq("status", "active");
+    for (const r of active ?? [])
+      blocked.add((r as { contact_id: string }).contact_id);
+
+    if (opts.cooldownMinutes && opts.cooldownMinutes > 0) {
+      const since = new Date(
+        Date.now() - opts.cooldownMinutes * 60_000
+      ).toISOString();
+      const { data: recent } = await admin
+        .from("workflow_runs")
+        .select("contact_id")
+        .eq("workflow_id", workflowId)
+        .gte("started_at", since);
+      for (const r of recent ?? [])
+        blocked.add((r as { contact_id: string }).contact_id);
+    }
+  }
+
+  const eligible = contactIds.filter((id) => !blocked.has(id));
   if (!eligible.length) return [];
 
   const { data: runs } = await admin
@@ -868,6 +1075,10 @@ async function enrollContactsInWorkflow(
     .select("id");
   return (runs ?? []).map((r) => (r as { id: string }).id);
 }
+
+// Contacts re-enrolled into the same workflow within this window are treated as
+// a runaway loop and skipped (see enrollContactsInWorkflow).
+const WORKFLOW_REENROLL_COOLDOWN_MIN = 60;
 
 /**
  * Stop every active run for a contact whose workflow matches `predicate`
@@ -1007,7 +1218,9 @@ export const workflowStageChange = inngest.createFunction(
             admin,
             orgId,
             (wf as { id: string }).id,
-            [contactId]
+            [contactId],
+            // Bound set_lifecycle → stage_change → set_lifecycle ping-pong.
+            { cooldownMinutes: WORKFLOW_REENROLL_COOLDOWN_MIN }
           ))
         );
       }
@@ -1104,7 +1317,10 @@ async function enrollEngagementWorkflows(
         admin,
         orgId,
         (wf as { id: string }).id,
-        [contactId]
+        [contactId],
+        // Open/click pixels fire repeatedly for the same contact for weeks —
+        // enroll them once per workflow, not on every reload.
+        { oncePerContact: true }
       ))
     );
   }

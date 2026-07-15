@@ -18,6 +18,12 @@ export async function createInvite(
 ): Promise<TeamState> {
   const { supabase, org } = await requireContext();
 
+  // Only owners/admins may invite. Roles gate workspace, pipeline, and
+  // integration settings, so a plain member must not be able to invite an owner.
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { error: "Only owners and admins can invite teammates." };
+  }
+
   const email = String(fd.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -73,7 +79,10 @@ export async function createInvite(
 }
 
 export async function revokeInvite(id: string): Promise<TeamState> {
-  const { supabase } = await requireContext();
+  const { supabase, org } = await requireContext();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { error: "Only owners and admins can manage invitations." };
+  }
   const { error } = await supabase
     .from("invitations")
     .update({ status: "revoked" })

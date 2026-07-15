@@ -8,6 +8,8 @@ export type SendMessage = {
   subject: string;
   html: string;
   replyTo?: string;
+  /** Extra MIME headers, e.g. List-Unsubscribe / List-Unsubscribe-Post. */
+  headers?: Record<string, string>;
 };
 
 export type SendResult = { id: string; status: "sent" | "failed"; error?: string };
@@ -43,6 +45,7 @@ class ResendProvider implements EmailProvider {
           subject: msg.subject,
           html: msg.html,
           reply_to: msg.replyTo,
+          headers: msg.headers,
         }),
       });
       if (!res.ok) {

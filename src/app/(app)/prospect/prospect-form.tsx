@@ -17,6 +17,7 @@ import {
   Building2,
   Plus,
   Check,
+  TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -249,6 +250,17 @@ export function ProspectForm() {
           </form>
         </CardContent>
       </Card>
+
+      {state.ok && state.mock && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          <p>
+            <strong>Sample data.</strong> These are placeholder businesses, not
+            real leads — set <code>GOOGLE_PLACES_API_KEY</code> to search live
+            data. Don’t import these into a real workspace.
+          </p>
+        </div>
+      )}
 
       {state.ok && results.length > 0 && (
         <Card>

@@ -117,6 +117,10 @@ export async function saveCompany(
 
 export async function deleteCompany(id: string): Promise<FormState> {
   const { supabase } = await requireContext();
+  // Remove deals linked only to this company first — deleting the company
+  // SET-NULLs company_id, and a deal with no contact either would then violate
+  // deals_contact_or_company_chk and abort the delete.
+  await supabase.from("deals").delete().eq("company_id", id).is("contact_id", null);
   const { error } = await supabase.from("companies").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/companies");

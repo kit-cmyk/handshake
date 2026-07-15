@@ -143,6 +143,13 @@ export async function deleteContacts(ids: string[]): Promise<FixState> {
   const unique = [...new Set(ids)].filter(Boolean);
   if (!unique.length) return { error: "No contacts selected." };
 
+  // Remove deals linked only to these contacts first, else the SET-NULL on
+  // delete would violate deals_contact_or_company_chk and abort the whole batch.
+  await supabase
+    .from("deals")
+    .delete()
+    .in("contact_id", unique)
+    .is("company_id", null);
   const { error } = await supabase.from("contacts").delete().in("id", unique);
   if (error) return { error: error.message };
 
@@ -164,8 +171,12 @@ type Supabase = Awaited<ReturnType<typeof requireContext>>["supabase"];
 
 /**
  * Core merge for one group (no revalidation — callers do that). Backfills the
- * primary's empty fields from the duplicates, reassigns their activities +
- * deals, then deletes them. Returns an error string or null.
+ * primary's empty fields from the duplicates, then hands off to the
+ * `merge_contacts` RPC, which transactionally reassigns ALL related records
+ * (activities, deals, events, messages, conversations, campaign enrollments,
+ * workflow runs, segment memberships) to the primary before deleting the
+ * duplicates — so a merge no longer silently destroys inbox threads, enrollment
+ * history, or segment membership. Returns an error string or null.
  */
 async function mergeOne(
   supabase: Supabase,
@@ -199,17 +210,11 @@ async function mergeOne(
     await supabase.from("contacts").update(patch).eq("id", primaryId);
   }
 
-  // Reassign related records to the primary before deleting duplicates.
-  await supabase
-    .from("activities")
-    .update({ contact_id: primaryId })
-    .in("contact_id", ids);
-  await supabase
-    .from("deals")
-    .update({ contact_id: primaryId })
-    .in("contact_id", ids);
-
-  const { error } = await supabase.from("contacts").delete().in("id", ids);
+  // Transactionally reassign every related record, then delete the duplicates.
+  const { error } = await supabase.rpc("merge_contacts", {
+    p_primary: primaryId,
+    p_dupes: ids,
+  });
   return error ? error.message : null;
 }
 

@@ -192,6 +192,11 @@ export async function saveContact(
 
 export async function deleteContact(id: string): Promise<FormState> {
   const { supabase } = await requireContext();
+  // Deals link to a contact and/or company (deals_contact_or_company_chk).
+  // Deleting the contact SET-NULLs its deals; a deal linked ONLY to this
+  // contact would then violate the check, aborting the delete. Remove those
+  // party-less deals first (company-linked deals survive with company only).
+  await supabase.from("deals").delete().eq("contact_id", id).is("company_id", null);
   const { error } = await supabase.from("contacts").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/contacts");

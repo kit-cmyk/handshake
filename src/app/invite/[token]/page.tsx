@@ -36,11 +36,14 @@ export default async function InvitePage({
   const admin = createAdminClient();
   const { data: invite } = await admin
     .from("invitations")
-    .select("email, role, status, org_id")
+    .select("email, role, status, org_id, expires_at")
     .eq("token", token)
     .maybeSingle();
 
-  if (!invite || invite.status !== "pending") {
+  const expired =
+    !!invite?.expires_at && new Date(invite.expires_at as string) <= new Date();
+
+  if (!invite || invite.status !== "pending" || expired) {
     return (
       <Shell>
         <Card>

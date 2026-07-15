@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireContext } from "@/lib/context";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   parseDefinition,
   evaluateFilter,
@@ -26,11 +27,16 @@ async function fetchEvaluable(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<EvaluableContact[]> {
-  const { data } = await supabase
-    .from("contacts")
-    .select(EVALUABLE_SELECT)
-    .eq("org_id", orgId);
-  return (data ?? []) as unknown as EvaluableContact[];
+  // Must see every contact — page past the PostgREST row cap so segment
+  // membership isn't silently truncated on large books.
+  const rows = await fetchAllRows<EvaluableContact>((from, to) =>
+    supabase
+      .from("contacts")
+      .select(EVALUABLE_SELECT)
+      .eq("org_id", orgId)
+      .range(from, to)
+  );
+  return rows;
 }
 
 /** Resolve a definition and replace the segment's cached membership rows. */

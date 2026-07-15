@@ -18,8 +18,18 @@ create extension if not exists "pgcrypto";  -- gen_random_uuid()
 create table if not exists organizations (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
+  -- Per-org send scheduling (see migration 0030). Defaults = always allowed.
+  send_timezone     text     not null default 'UTC',
+  send_window_start smallint not null default 0,
+  send_window_end   smallint not null default 24,
+  send_days         smallint[] not null default '{0,1,2,3,4,5,6}',
   created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  constraint organizations_send_window_chk check (
+    send_window_start >= 0 and send_window_start <= 23
+    and send_window_end >= 1 and send_window_end <= 24
+    and send_window_start < send_window_end
+  )
 );
 
 create table if not exists memberships (
@@ -42,6 +52,18 @@ security definer
 set search_path = public
 as $$
   select org_id from memberships where user_id = auth.uid();
+$$;
+
+-- Orgs where the current user is an owner or admin (for privileged policies).
+create or replace function auth_admin_org_ids()
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select org_id from memberships
+  where user_id = auth.uid() and role in ('owner', 'admin');
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -398,7 +420,7 @@ create table if not exists campaign_enrollments (
   campaign_id   uuid not null references campaigns(id) on delete cascade,
   contact_id    uuid not null references contacts(id) on delete cascade,
   status        text not null default 'active'
-                  check (status in ('active','completed','replied','bounced','unsubscribed','stopped')),
+                  check (status in ('active','completed','replied','bounced','unsubscribed','stopped','failed')),
   current_step  integer not null default 0,
   enrolled_at   timestamptz not null default now(),
   created_at    timestamptz not null default now(),
@@ -649,19 +671,32 @@ create table if not exists invitations (
   status      text not null default 'pending' check (status in ('pending','accepted','revoked')),
   invited_by  uuid references auth.users(id) on delete set null,
   created_at  timestamptz not null default now(),
-  accepted_at timestamptz
+  accepted_at timestamptz,
+  expires_at  timestamptz not null default (now() + interval '14 days')
 );
 create index if not exists invitations_org_idx on invitations(org_id, status);
 create index if not exists invitations_email_idx on invitations(lower(email));
 
 alter table invitations enable row level security;
 
--- Org members manage their org's invitations. Acceptance runs via the
--- accept_invitation() RPC (security definer), so no public read policy needed.
+-- Members can read their org's invitations, but only owners/admins may create,
+-- modify, or revoke them — otherwise a plain member could insert a role='owner'
+-- invite and accept it to escalate. Acceptance runs via the accept_invitation()
+-- RPC (security definer). See migration 0026.
 drop policy if exists invitations_all on invitations;
-create policy invitations_all on invitations for all
-  using (org_id in (select auth_org_ids()))
-  with check (org_id in (select auth_org_ids()));
+drop policy if exists invitations_select on invitations;
+create policy invitations_select on invitations for select
+  using (org_id in (select auth_org_ids()));
+drop policy if exists invitations_insert on invitations;
+create policy invitations_insert on invitations for insert
+  with check (org_id in (select auth_admin_org_ids()));
+drop policy if exists invitations_update on invitations;
+create policy invitations_update on invitations for update
+  using (org_id in (select auth_admin_org_ids()))
+  with check (org_id in (select auth_admin_org_ids()));
+drop policy if exists invitations_delete on invitations;
+create policy invitations_delete on invitations for delete
+  using (org_id in (select auth_admin_org_ids()));
 
 -- ---------------------------------------------------------------------------
 -- Membership hardening: memberships may ONLY be created via security-definer
@@ -686,7 +721,7 @@ begin
   end if;
 
   select * into inv from invitations
-    where token = invite_token and status = 'pending';
+    where token = invite_token and status = 'pending' and expires_at > now();
   if not found then
     raise exception 'invalid or expired invitation';
   end if;
@@ -836,3 +871,77 @@ drop policy if exists org_integrations_all on org_integrations;
 create policy org_integrations_all on org_integrations for all
   using (org_id in (select auth_org_ids()))
   with check (org_id in (select auth_org_ids()));
+
+-- ---------------------------------------------------------------------------
+-- Transactional contact merge — reassigns ALL related records to the primary
+-- (skipping rows that would violate a per-contact unique constraint) before
+-- deleting the duplicates, so a merge never silently destroys inbox threads,
+-- enrollment history, or segment membership. See migration 0027.
+-- ---------------------------------------------------------------------------
+create or replace function merge_contacts(p_primary uuid, p_dupes uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_org uuid;
+begin
+  select org_id into v_org from contacts where id = p_primary;
+  if v_org is null then
+    raise exception 'primary contact not found';
+  end if;
+  if v_org not in (select auth_org_ids()) then
+    raise exception 'not authorized';
+  end if;
+
+  p_dupes := array(
+    select d from unnest(p_dupes) as d
+    where d <> p_primary
+      and exists (select 1 from contacts c where c.id = d and c.org_id = v_org)
+  );
+  if array_length(p_dupes, 1) is null then
+    return;
+  end if;
+
+  update activities set contact_id = p_primary where contact_id = any(p_dupes);
+  update deals      set contact_id = p_primary where contact_id = any(p_dupes);
+  update events     set contact_id = p_primary where contact_id = any(p_dupes);
+  update messages   set contact_id = p_primary where contact_id = any(p_dupes);
+
+  update conversations c set contact_id = p_primary
+   where c.contact_id = any(p_dupes)
+     and not exists (
+       select 1 from conversations p
+        where p.contact_id = p_primary and p.channel = c.channel
+     );
+
+  update campaign_enrollments e set contact_id = p_primary
+   where e.contact_id = any(p_dupes)
+     and not exists (
+       select 1 from campaign_enrollments p
+        where p.contact_id = p_primary and p.campaign_id = e.campaign_id
+     );
+
+  update workflow_runs r set contact_id = p_primary
+   where r.contact_id = any(p_dupes)
+     and not (
+       r.status = 'active'
+       and exists (
+         select 1 from workflow_runs p
+          where p.contact_id = p_primary
+            and p.workflow_id = r.workflow_id
+            and p.status = 'active'
+       )
+     );
+
+  update segment_members m set contact_id = p_primary
+   where m.contact_id = any(p_dupes)
+     and not exists (
+       select 1 from segment_members p
+        where p.contact_id = p_primary and p.segment_id = m.segment_id
+     );
+
+  delete from contacts where id = any(p_dupes);
+end;
+$$;

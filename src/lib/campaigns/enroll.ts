@@ -95,16 +95,20 @@ export async function enrollContacts(
   }) as { id: string }[];
   if (!eligible.length) return [];
 
+  // Upsert-ignore: if a concurrent trigger enrolled one of these contacts
+  // between the eligibility read above and now, that row is skipped rather than
+  // failing the whole batch on the unique(campaign_id, contact_id) constraint.
   const { data: inserted } = await admin
     .from("campaign_enrollments")
-    .insert(
+    .upsert(
       eligible.map((row) => ({
         org_id: orgId,
         campaign_id: campaignId,
         contact_id: row.id,
         status: "active",
         current_step: 0,
-      }))
+      })),
+      { onConflict: "campaign_id,contact_id", ignoreDuplicates: true }
     )
     .select("id, contact_id");
 

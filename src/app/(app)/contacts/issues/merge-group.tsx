@@ -144,7 +144,7 @@ export function MergeGroup({ group }: { group: DuplicateGroup }) {
             title={`Merge ${mergeIds.length} contact${
               mergeIds.length === 1 ? "" : "s"
             } into ${contactName(keep)}?`}
-            description="The merged contacts will be deleted and their activity and deals moved onto the one you kept. Empty fields on the kept contact are filled in from the merged ones. This can't be undone."
+            description="The merged contacts will be deleted and all their history — activity, deals, emails, conversations, campaign enrollments, and segment memberships — moved onto the one you kept. Empty fields on the kept contact are filled in from the merged ones. This can't be undone."
             confirmLabel="Merge"
             pendingLabel="Merging…"
             onConfirm={doMerge}

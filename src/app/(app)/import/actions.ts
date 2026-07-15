@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   validateRow,
   type Target,
@@ -110,11 +111,15 @@ export async function runImport(
       ),
     ];
     if (referenced.length) {
-      const { data: existing } = await supabase
-        .from("companies")
-        .select("id, name")
-        .eq("org_id", org.id);
-      for (const c of existing ?? [])
+      const existing = await fetchAllRows<{ id: string; name: string }>(
+        (from, to) =>
+          supabase
+            .from("companies")
+            .select("id, name")
+            .eq("org_id", org.id)
+            .range(from, to)
+      );
+      for (const c of existing)
         companyByName.set((c.name as string).toLowerCase(), c.id as string);
 
       const missing = referenced.filter(
@@ -130,14 +135,19 @@ export async function runImport(
       }
     }
 
-    // Existing contacts keyed by email for dedupe.
+    // Existing contacts keyed by email for dedupe. Page past the row cap so
+    // re-imports don't create duplicates on large books.
     const emailToId = new Map<string, string>();
-    const { data: existingContacts } = await supabase
-      .from("contacts")
-      .select("id, email")
-      .eq("org_id", org.id)
-      .not("email", "is", null);
-    for (const c of existingContacts ?? [])
+    const existingContacts = await fetchAllRows<{ id: string; email: string }>(
+      (from, to) =>
+        supabase
+          .from("contacts")
+          .select("id, email")
+          .eq("org_id", org.id)
+          .not("email", "is", null)
+          .range(from, to)
+    );
+    for (const c of existingContacts)
       emailToId.set((c.email as string).toLowerCase(), c.id as string);
 
     for (const { r } of valid) {
@@ -186,12 +196,16 @@ export async function runImport(
   } else {
     // Companies — dedupe by domain.
     const domainToId = new Map<string, string>();
-    const { data: existingCompanies } = await supabase
-      .from("companies")
-      .select("id, domain")
-      .eq("org_id", org.id)
-      .not("domain", "is", null);
-    for (const c of existingCompanies ?? [])
+    const existingCompanies = await fetchAllRows<{ id: string; domain: string }>(
+      (from, to) =>
+        supabase
+          .from("companies")
+          .select("id, domain")
+          .eq("org_id", org.id)
+          .not("domain", "is", null)
+          .range(from, to)
+    );
+    for (const c of existingCompanies)
       domainToId.set((c.domain as string).toLowerCase(), c.id as string);
 
     for (const { r } of valid) {
@@ -275,13 +289,14 @@ export async function runImport(
 
   // Post-ingest data-health check so issues surface on the upload itself.
   if (target === "contacts") {
-    const { data: allContacts } = await supabase
-      .from("contacts")
-      .select("*, companies(id, name)")
-      .eq("org_id", org.id);
-    result.issues = summarize(
-      detectIssues((allContacts ?? []) as ContactWithCompany[])
+    const allContacts = await fetchAllRows<ContactWithCompany>((from, to) =>
+      supabase
+        .from("contacts")
+        .select("*, companies(id, name)")
+        .eq("org_id", org.id)
+        .range(from, to)
     );
+    result.issues = summarize(detectIssues(allContacts));
   }
 
   revalidatePath("/import");
