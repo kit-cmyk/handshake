@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import {
   getPlacesProvider,
+  isPlacesConfigured,
   applyFilters,
   type LatLng,
 } from "@/lib/places/provider";
@@ -43,6 +44,8 @@ export type SearchState = {
   center?: LatLng | null;
   radiusMeters?: number | null;
   jobId?: string | null;
+  /** Results are deterministic sample data, not real businesses (dev only). */
+  mock?: boolean;
 };
 
 export type ImportState = {
@@ -79,6 +82,15 @@ export async function searchLeads(
 
   if (!category || !location)
     return { error: "Enter both an industry/category and a location." };
+
+  // Never feed fabricated sample data into a live CRM. Without a Places key the
+  // provider is the mock — allowed in dev, refused in production.
+  if (!isPlacesConfigured() && process.env.NODE_ENV === "production") {
+    return {
+      error:
+        "Lead search isn’t configured. Set GOOGLE_PLACES_API_KEY to enable prospecting.",
+    };
+  }
 
   const provider = getPlacesProvider();
 
@@ -170,6 +182,7 @@ export async function searchLeads(
       center,
       radiusMeters: radiusMeters ?? null,
       jobId,
+      mock: provider.name === "mock",
     };
   } catch (e) {
     const message = (e as Error).message;

@@ -404,16 +404,19 @@ export async function enrollCampaign(
   if (!eligible.length)
     return { ok: true, enrolled: 0, skipped: total, reasons };
 
+  // Upsert-ignore so a contact enrolled by a concurrent trigger between the
+  // eligibility check and this insert is skipped, not fatal to the whole batch.
   const { data: inserted, error } = await supabase
     .from("campaign_enrollments")
-    .insert(
+    .upsert(
       eligible.map((c) => ({
         org_id: org.id,
         campaign_id: campaignId,
         contact_id: c.id,
         status: "active",
         current_step: 0,
-      }))
+      })),
+      { onConflict: "campaign_id,contact_id", ignoreDuplicates: true }
     )
     .select("id, contact_id");
   if (error) return { error: error.message };

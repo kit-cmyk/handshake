@@ -38,6 +38,11 @@ function extractEmail(value: string | undefined | null): string | null {
   return email.includes("@") ? email : null;
 }
 
+/** Escape LIKE wildcards so `ilike` is a case-insensitive *exact* match. */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 /** Capture the parsed email into the inbox (best-effort; never throws). */
 async function captureMessage(
   admin: SupabaseClient,
@@ -157,19 +162,21 @@ export async function POST(request: Request) {
   }
 
   // No token — try to match a "cold" inbound to a contact by sender email.
+  // Use an escaped ilike (exact, case-insensitive — no `_`/`%` wildcard match).
   const senderEmail = extractEmail(body.from);
   if (senderEmail && (body.subject || body.text || body.html)) {
-    const { data: contact } = await admin
+    const { data: matches } = await admin
       .from("contacts")
       .select("id, org_id")
-      .ilike("email", senderEmail)
-      .limit(1)
-      .maybeSingle();
-    if (contact) {
-      const c = contact as { id: string; org_id: string };
+      .ilike("email", escapeLike(senderEmail));
+    const rows = (matches ?? []) as { id: string; org_id: string }[];
+    const orgs = new Set(rows.map((r) => r.org_id));
+    // If the address belongs to contacts in more than one org there's no token
+    // to disambiguate — refuse rather than leak the message into a random org.
+    if (rows.length && orgs.size === 1) {
       await captureMessage(
         admin,
-        { orgId: c.org_id, contactId: c.id, campaignId: null },
+        { orgId: rows[0].org_id, contactId: rows[0].id, campaignId: null },
         body,
       );
       return NextResponse.json({ ok: true });

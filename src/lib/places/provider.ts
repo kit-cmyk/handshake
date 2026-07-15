@@ -252,6 +252,11 @@ class GooglePlacesProvider implements PlacesProvider {
   }
 }
 
+/** True when a real Places provider is configured (a Google API key is set). */
+export function isPlacesConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_PLACES_API_KEY);
+}
+
 export function getPlacesProvider(): PlacesProvider {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   return key ? new GooglePlacesProvider(key) : new MockPlacesProvider();

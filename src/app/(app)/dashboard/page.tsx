@@ -16,12 +16,18 @@ import { getActiveOrg } from "@/lib/org";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-async function count(table: string, orgId: string): Promise<number> {
+async function count(
+  table: string,
+  orgId: string,
+  extra?: Record<string, string>
+): Promise<number> {
   const supabase = await createClient();
-  const { count } = await supabase
+  const query = supabase
     .from(table)
     .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .match(extra ?? {});
+  const { count } = await query;
   return count ?? 0;
 }
 
@@ -120,7 +126,8 @@ export default async function DashboardPage() {
   const [contacts, companies, deals, campaigns] = await Promise.all([
     count("contacts", orgId),
     count("companies", orgId),
-    count("deals", orgId),
+    // "Open Deals" card — exclude won/lost so the headline metric matches label.
+    count("deals", orgId, { status: "open" }),
     count("campaigns", orgId),
   ]);
 

@@ -8,15 +8,23 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkspaceForm } from "../workspace-form";
+import { SendWindowForm } from "../send-window-form";
 
 export default async function WorkspaceSettingsPage() {
   const { supabase, org } = await requireContext();
   const canManage = org.role === "owner" || org.role === "admin";
 
-  const { count: memberCount } = await supabase
-    .from("memberships")
-    .select("user_id", { count: "exact", head: true })
-    .eq("org_id", org.id);
+  const [{ count: memberCount }, { data: sendCfg }] = await Promise.all([
+    supabase
+      .from("memberships")
+      .select("user_id", { count: "exact", head: true })
+      .eq("org_id", org.id),
+    supabase
+      .from("organizations")
+      .select("send_timezone, send_window_start, send_window_end, send_days")
+      .eq("id", org.id)
+      .maybeSingle(),
+  ]);
 
   return (
     <>
@@ -29,6 +37,24 @@ export default async function WorkspaceSettingsPage() {
         </CardHeader>
         <CardContent>
           <WorkspaceForm name={org.name} canManage={canManage} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sending schedule</CardTitle>
+          <CardDescription>
+            The timezone and hours campaign &amp; workflow emails may send in.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SendWindowForm
+            timezone={sendCfg?.send_timezone ?? "UTC"}
+            startHour={sendCfg?.send_window_start ?? 0}
+            endHour={sendCfg?.send_window_end ?? 24}
+            days={sendCfg?.send_days ?? [0, 1, 2, 3, 4, 5, 6]}
+            canManage={canManage}
+          />
         </CardContent>
       </Card>
 

@@ -23,3 +23,18 @@ export function unsubUrl(contactId: string, campaignId: string): string {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   return `${base}/api/unsubscribe?token=${makeUnsubToken(contactId, campaignId)}`;
 }
+
+/**
+ * RFC 8058 one-click unsubscribe headers for bulk mail. Gmail/Yahoo bulk-sender
+ * rules expect these; the mail client shows a native "Unsubscribe" control that
+ * POSTs `List-Unsubscribe=One-Click` to the URL (handled by the route's POST).
+ */
+export function unsubHeaders(
+  contactId: string,
+  campaignId: string
+): Record<string, string> {
+  return {
+    "List-Unsubscribe": `<${unsubUrl(contactId, campaignId)}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}

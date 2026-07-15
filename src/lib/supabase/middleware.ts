@@ -13,6 +13,7 @@ const PUBLIC_ROUTES = [
   "/invite",
   "/api/unsubscribe",
   "/api/webhooks",
+  "/api/track", // open/click pixels — hit by email clients with no session
 ];
 
 // Pages a signed-in user shouldn't see — bounce them to the app.
