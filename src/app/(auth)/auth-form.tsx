@@ -45,15 +45,16 @@ export function AuthForm({ mode, action, next }: Props) {
 
       {GOOGLE_ENABLED && (
         <CardContent className="px-0 pb-0">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => signInWithGoogle(next)}
-          >
-            <GoogleIcon className="size-4" />
-            Continue with Google
-          </Button>
+          {/* Form action so the OAuth redirect is driven by React's action
+              mechanism — invoking the redirecting server action from a bare
+              onClick is unreliable in Next. */}
+          <form action={signInWithGoogle}>
+            {next && <input type="hidden" name="next" value={next} />}
+            <Button type="submit" variant="outline" className="w-full">
+              <GoogleIcon className="size-4" />
+              {isLogin ? "Sign in with Google" : "Sign up with Google"}
+            </Button>
+          </form>
           <div className="relative my-4 text-center">
             <span className="relative z-10 bg-background px-2 text-xs text-muted-foreground">
               or
