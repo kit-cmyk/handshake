@@ -29,6 +29,27 @@ describe("renderTemplate shortcodes", () => {
     expect(renderTemplate("{{full_name}}", c)).toBe("Sam Lee");
   });
 
+  it("fills sender + booking tokens", () => {
+    const withSender = {
+      ...c,
+      sender_name: "Jordan Blake",
+      sender_email: "jordan@yourco.com",
+      booking_link: "https://cal.com/jordan/30min",
+    };
+    expect(renderTemplate("{{sender_name}}", withSender)).toBe("Jordan Blake");
+    expect(renderTemplate('<a href="mailto:{{sender_email}}">x</a>', withSender)).toBe(
+      '<a href="mailto:jordan@yourco.com">x</a>'
+    );
+    expect(renderTemplate('<a href="{{booking_link}}">book</a>', withSender)).toBe(
+      '<a href="https://cal.com/jordan/30min">book</a>'
+    );
+  });
+
+  it("renders sender + booking tokens empty when unset", () => {
+    expect(renderTemplate("[{{sender_name}}]", c)).toBe("[]");
+    expect(renderTemplate("[{{booking_link}}]", c)).toBe("[]");
+  });
+
   it("renders missing fields and unknown tokens as empty", () => {
     expect(renderTemplate("[{{phone}}]", { first_name: "A" })).toBe("[]");
     expect(renderTemplate("[{{nope}}]", c)).toBe("[]");

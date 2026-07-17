@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = {
@@ -11,7 +12,20 @@ export type AuthState = {
   email?: string;
 };
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+/**
+ * Public base URL for auth redirects (OAuth callback, confirmation emails).
+ * Prefers the configured NEXT_PUBLIC_SITE_URL; if unset, derives it from the
+ * incoming request's forwarded host/proto so production never falls back to
+ * localhost. Only defaults to localhost when there is no request context.
+ */
+async function siteUrl(): Promise<string> {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+  const h = await headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "http://localhost:3000";
+}
 
 /** Turn raw Supabase auth errors into friendly, non-enumerating copy. */
 function friendly(message: string): string {
@@ -75,7 +89,7 @@ export async function signup(
     password,
     options: {
       data: { full_name: fullName || null },
-      emailRedirectTo: `${SITE}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+      emailRedirectTo: `${await siteUrl()}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
     },
   });
 
@@ -101,7 +115,7 @@ export async function resendConfirmation(
   const { error } = await supabase.auth.resend({
     type: "signup",
     email,
-    options: { emailRedirectTo: `${SITE}/auth/callback` },
+    options: { emailRedirectTo: `${await siteUrl()}/auth/callback` },
   });
   if (error) return { error: friendly(error.message), email, needsConfirmation: true };
   return { message: "Confirmation email sent.", email, needsConfirmation: true };
@@ -116,7 +130,7 @@ export async function requestPasswordReset(
 
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${SITE}/auth/callback?next=/reset-password`,
+    redirectTo: `${await siteUrl()}/auth/callback?next=/reset-password`,
   });
   // Never reveal whether the email exists.
   return {
@@ -160,7 +174,7 @@ export async function signInWithGoogle(formData: FormData) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${SITE}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+      redirectTo: `${await siteUrl()}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
     },
   });
   if (error) redirect("/error?message=" + encodeURIComponent(error.message));

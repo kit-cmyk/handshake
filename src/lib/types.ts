@@ -194,6 +194,10 @@ export type Mailbox = {
   daily_limit: number;
   status: "active" | "disabled";
   created_at: string;
+  /** Connected-account fields (Gmail/Outlook OAuth). Null for address-only rows. */
+  oauth_email: string | null;
+  /** Last connect/refresh/send auth failure; null = healthy. Tokens are never exposed. */
+  connect_error: string | null;
 };
 
 export type Campaign = {

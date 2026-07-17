@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import { inngest } from "@/lib/inngest/client";
-import { getEmailProvider, defaultFrom } from "@/lib/email/provider";
+import { defaultFrom } from "@/lib/email/provider";
+import {
+  sendViaMailbox,
+  MAILBOX_SENDER_COLUMNS,
+  type MailboxSender,
+} from "@/lib/email/send";
 import { renderTemplate, type MergeContact } from "@/lib/email/template";
 import { wrapEmail } from "@/lib/email/layout";
 import { makeSnippet } from "@/lib/inbox/inbound";
@@ -21,25 +26,60 @@ export type ComposeState = { ok?: boolean; error?: string; conversationId?: stri
 
 const FALLBACK_FROM = defaultFrom();
 
-/** Resolve a "Name <email>" from line from the org's active mailbox. */
+/**
+ * Resolve the org's active mailbox plus a "Name <email>" from line. Returns the
+ * full sender row so deliverEmail can route through a connected Gmail/Outlook
+ * account; falls back to the global provider's default from when there is none.
+ */
 async function resolveFrom(
   supabase: SupabaseClient,
   orgId: string
-): Promise<{ from: string; replyTo?: string }> {
+): Promise<{
+  from: string;
+  replyTo?: string;
+  mailbox: MailboxSender | null;
+  senderName: string;
+  senderEmail: string;
+}> {
   const { data: mailbox } = await supabase
     .from("mailboxes")
-    .select("email, display_name")
+    .select(`email, display_name, ${MAILBOX_SENDER_COLUMNS}`)
     .eq("org_id", orgId)
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (!mailbox?.email) return { from: FALLBACK_FROM };
-  const m = mailbox as { email: string; display_name: string | null };
+  if (!mailbox) {
+    // No mailbox: fall back to the global default identity for the {{sender_*}}
+    // tokens, parsed from EMAIL_FROM's "Name <email>" form.
+    return {
+      from: FALLBACK_FROM,
+      mailbox: null,
+      senderName: parseFromName(FALLBACK_FROM),
+      senderEmail: parseFromEmail(FALLBACK_FROM),
+    };
+  }
+  const m = mailbox as MailboxSender & { email: string; display_name: string | null };
+  const address = m.oauth_email ?? m.email;
   return {
-    from: `${m.display_name ?? ""} <${m.email}>`.trim(),
-    replyTo: m.email,
+    from: `${m.display_name ?? ""} <${address}>`.trim(),
+    replyTo: address,
+    mailbox: m,
+    senderName: m.display_name ?? "",
+    senderEmail: address,
   };
+}
+
+/** Extract the display name from a "Name <email>" from-line. */
+function parseFromName(from: string): string {
+  const i = from.indexOf("<");
+  return i > 0 ? from.slice(0, i).trim() : "";
+}
+
+/** Extract the address from a "Name <email>" from-line (or the whole string). */
+function parseFromEmail(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  return (m ? m[1] : from).trim();
 }
 
 type ContactRow = {
@@ -79,12 +119,26 @@ async function deliverEmail(params: {
   subject: string;
   bodyHtml: string;
 }): Promise<string | null> {
-  const renderedSubject = renderTemplate(params.subject, params.merge);
-  const renderedHtml = renderTemplate(params.bodyHtml, params.merge);
+  const { from, replyTo, mailbox, senderName, senderEmail } = await resolveFrom(
+    params.supabase,
+    params.orgId
+  );
+  const { data: orgRow } = await params.supabase
+    .from("organizations")
+    .select("booking_url")
+    .eq("id", params.orgId)
+    .maybeSingle();
 
-  const { from, replyTo } = await resolveFrom(params.supabase, params.orgId);
+  const merge: MergeContact = {
+    ...params.merge,
+    sender_name: senderName,
+    sender_email: senderEmail,
+    booking_link: (orgRow?.booking_url as string | null) ?? "",
+  };
+  const renderedSubject = renderTemplate(params.subject, merge);
+  const renderedHtml = renderTemplate(params.bodyHtml, merge);
 
-  const res = await getEmailProvider().send({
+  const res = await sendViaMailbox(params.supabase, mailbox, {
     from,
     to: params.to,
     subject: renderedSubject,

@@ -8,9 +8,11 @@ import { updateWorkspace, type WorkspaceState } from "./workspace-actions";
 
 export function WorkspaceForm({
   name,
+  bookingUrl,
   canManage,
 }: {
   name: string;
+  bookingUrl: string;
   canManage: boolean;
 }) {
   const [state, action, pending] = useActionState<WorkspaceState, FormData>(
@@ -30,6 +32,26 @@ export function WorkspaceForm({
           disabled={!canManage}
           className="max-w-sm"
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="booking_url">Booking link</Label>
+        <Input
+          id="booking_url"
+          name="booking_url"
+          type="url"
+          inputMode="url"
+          placeholder="https://cal.com/you/30min"
+          defaultValue={bookingUrl}
+          disabled={!canManage}
+          className="max-w-sm"
+        />
+        <p className="text-xs text-muted-foreground">
+          Your scheduling URL. Insert it into any email with the{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+            {"{{booking_link}}"}
+          </code>{" "}
+          field so recipients can book a time.
+        </p>
       </div>
       <div aria-live="polite">
         {state.error && (
