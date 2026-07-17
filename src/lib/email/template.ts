@@ -1,5 +1,6 @@
 // Merge-tag ("shortcode") rendering for campaign emails. Tokens draw from the
-// contact and its company. Unknown tokens render empty.
+// contact and its company, plus the sender identity and the workspace booking
+// link resolved at send time. Unknown tokens render empty.
 
 export type MergeContact = {
   first_name?: string | null;
@@ -9,6 +10,13 @@ export type MergeContact = {
   title?: string | null;
   lifecycle_stage?: string | null;
   company?: string | null;
+  // Sender + workspace fields. These are the SAME for every recipient of a
+  // given send — filled from the sending mailbox and the org's booking URL, not
+  // the contact — but they ride along in the same map so templates can reference
+  // them with the same {{token}} syntax.
+  sender_name?: string | null;
+  sender_email?: string | null;
+  booking_link?: string | null;
 };
 
 /** Supported merge tokens, grouped for the builder's "Insert field" menu. */
@@ -29,6 +37,17 @@ export const MERGE_TOKEN_GROUPS = [
     group: "Company",
     tokens: [{ token: "company", label: "Company name" }],
   },
+  {
+    group: "You",
+    tokens: [
+      { token: "sender_name", label: "Your name" },
+      { token: "sender_email", label: "Your email" },
+    ],
+  },
+  {
+    group: "Scheduling",
+    tokens: [{ token: "booking_link", label: "Booking link" }],
+  },
 ] as const;
 
 /** Flat list of every supported token. */
@@ -46,6 +65,9 @@ export const SAMPLE_MERGE: MergeContact = {
   title: "Head of Operations",
   lifecycle_stage: "qualified",
   company: "Acme Co",
+  sender_name: "Jordan Blake",
+  sender_email: "jordan@yourco.com",
+  booking_link: "https://cal.com/jordan/30min",
 };
 
 export function renderTemplate(tpl: string, c: MergeContact): string {
@@ -58,6 +80,9 @@ export function renderTemplate(tpl: string, c: MergeContact): string {
     title: c.title ?? "",
     lifecycle_stage: c.lifecycle_stage ?? "",
     company: c.company ?? "",
+    sender_name: c.sender_name ?? "",
+    sender_email: c.sender_email ?? "",
+    booking_link: c.booking_link ?? "",
   };
   return (tpl ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) =>
     key in map ? map[key] : ""

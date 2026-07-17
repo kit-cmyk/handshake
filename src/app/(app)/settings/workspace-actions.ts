@@ -21,15 +21,30 @@ export async function updateWorkspace(
   if (name.length > 80)
     return { error: "Workspace name must be 80 characters or fewer." };
 
+  const bookingRaw = String(fd.get("booking_url") ?? "").trim();
+  if (bookingRaw && !isValidHttpUrl(bookingRaw))
+    return { error: "Booking link must be a full URL starting with https://." };
+  // Empty clears the link; templates then render the {{booking_link}} token empty.
+  const booking_url = bookingRaw || null;
+
   const { error } = await supabase
     .from("organizations")
-    .update({ name })
+    .update({ name, booking_url })
     .eq("id", org.id);
   if (error) return { error: error.message };
 
   // Sidebar, org switcher, and header all read the org name.
   revalidatePath("/", "layout");
   return { ok: true, message: "Workspace updated." };
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function isValidTimezone(tz: string): boolean {

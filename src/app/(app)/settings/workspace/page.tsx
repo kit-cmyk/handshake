@@ -21,7 +21,9 @@ export default async function WorkspaceSettingsPage() {
       .eq("org_id", org.id),
     supabase
       .from("organizations")
-      .select("send_timezone, send_window_start, send_window_end, send_days")
+      .select(
+        "send_timezone, send_window_start, send_window_end, send_days, booking_url"
+      )
       .eq("id", org.id)
       .maybeSingle(),
   ]);
@@ -32,11 +34,15 @@ export default async function WorkspaceSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Workspace</CardTitle>
           <CardDescription>
-            Your organization&apos;s name, shown across the app.
+            Your organization&apos;s name and the booking link used in emails.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <WorkspaceForm name={org.name} canManage={canManage} />
+          <WorkspaceForm
+            name={org.name}
+            bookingUrl={sendCfg?.booking_url ?? ""}
+            canManage={canManage}
+          />
         </CardContent>
       </Card>
 

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { Plus, Trash2, Mail, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,18 +23,34 @@ import type { Mailbox } from "@/lib/types";
 const PROVIDER_LABELS: Record<string, string> = {
   resend: "Resend",
   mock: "Test mode (not delivered)",
+  gmail: "Gmail",
+  outlook: "Outlook",
 };
 
 function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] ?? provider;
 }
 
+/** A connectable OAuth mailbox provider whose app is configured on the server. */
+type ConnectableProvider = {
+  type: string;
+  label: string;
+  description: string;
+  chip: string;
+};
+
 export function Mailboxes({
   mailboxes,
   deliveryConfigured,
+  connectable,
+  canManage,
+  banner,
 }: {
   mailboxes: Mailbox[];
   deliveryConfigured: boolean;
+  connectable: ConnectableProvider[];
+  canManage: boolean;
+  banner: { kind: "ok" | "error"; text: string } | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -53,6 +69,18 @@ export function Mailboxes({
 
   return (
     <div className="space-y-4">
+      {banner && (
+        <p
+          className={
+            banner.kind === "ok"
+              ? "rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+              : "rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          }
+        >
+          {banner.text}
+        </p>
+      )}
+
       {deliveryConfigured && (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -66,39 +94,75 @@ export function Mailboxes({
 
       {mailboxes.length > 0 && (
         <ul className="divide-y rounded-lg border">
-          {mailboxes.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
-              <Mail className="size-4 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">
-                  {m.display_name ? `${m.display_name} · ` : ""}
-                  {m.email}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {m.daily_limit}/day · {providerLabel(m.provider)}
-                </p>
-              </div>
-              <Badge variant={m.status === "active" ? "success" : "secondary"}>
-                {m.status}
-              </Badge>
-              <ConfirmDialog
-                trigger={
-                  <Button variant="ghost" size="icon" className="size-8">
-                    <Trash2 className="size-4" />
-                  </Button>
-                }
-                title="Remove mailbox?"
-                description={`Campaigns can no longer send from ${m.email}. This can't be undone.`}
-                confirmLabel="Remove"
-                pendingLabel="Removing…"
-                onConfirm={async () => {
-                  await deleteMailbox(m.id);
-                  router.refresh();
-                }}
-              />
-            </li>
-          ))}
+          {mailboxes.map((m) => {
+            const connected = !!m.oauth_email;
+            return (
+              <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
+                <Mail className="size-4 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {m.display_name ? `${m.display_name} · ` : ""}
+                    {m.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {m.daily_limit}/day · {providerLabel(m.provider)}
+                  </p>
+                  {m.connect_error && (
+                    <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="size-3.5" />
+                      Reconnect needed — sending is paused for this mailbox.
+                    </p>
+                  )}
+                </div>
+                {connected &&
+                  canManage &&
+                  (m.connect_error ? (
+                    <Button asChild variant="outline" size="sm">
+                      <a href={`/api/mailboxes/${m.provider}/connect`}>Reconnect</a>
+                    </Button>
+                  ) : (
+                    <Badge variant="success">Connected</Badge>
+                  ))}
+                {!connected && (
+                  <Badge variant={m.status === "active" ? "success" : "secondary"}>
+                    {m.status}
+                  </Badge>
+                )}
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="ghost" size="icon" className="size-8">
+                      <Trash2 className="size-4" />
+                    </Button>
+                  }
+                  title={connected ? "Disconnect mailbox?" : "Remove mailbox?"}
+                  description={
+                    connected
+                      ? `Handshake will forget its access to ${m.email} and campaigns can no longer send from it. You can reconnect anytime.`
+                      : `Campaigns can no longer send from ${m.email}. This can't be undone.`
+                  }
+                  confirmLabel={connected ? "Disconnect" : "Remove"}
+                  pendingLabel={connected ? "Disconnecting…" : "Removing…"}
+                  onConfirm={async () => {
+                    await deleteMailbox(m.id);
+                    router.refresh();
+                  }}
+                />
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {canManage && connectable.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {connectable.map((p) => (
+            <Button key={p.type} asChild variant="outline" size="sm">
+              <a href={`/api/mailboxes/${p.type}/connect`}>
+                <Mail className="size-4" /> Connect {p.label}
+              </a>
+            </Button>
+          ))}
+        </div>
       )}
 
       <Sheet open={open} onOpenChange={setOpen}>

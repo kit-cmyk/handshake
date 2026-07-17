@@ -8,7 +8,12 @@ import {
   EVALUABLE_SELECT,
   type EvaluableContact,
 } from "@/lib/segments";
-import { getEmailProvider, defaultFrom } from "@/lib/email/provider";
+import { defaultFrom } from "@/lib/email/provider";
+import {
+  sendViaMailbox,
+  MAILBOX_SENDER_COLUMNS,
+  type MailboxSender,
+} from "@/lib/email/send";
 import { renderTemplate, withUnsubscribe } from "@/lib/email/template";
 import { wrapEmail } from "@/lib/email/layout";
 import {
@@ -227,6 +232,11 @@ export const campaignEngine = inngest.createFunction(
         mailbox = data;
       }
       const sendWindow = await loadSendWindow(admin, enr.org_id as string);
+      const { data: orgRow } = await admin
+        .from("organizations")
+        .select("booking_url")
+        .eq("id", enr.org_id as string)
+        .maybeSingle();
       return {
         orgId: enr.org_id as string,
         campaignId: enr.campaign_id as string,
@@ -242,6 +252,7 @@ export const campaignEngine = inngest.createFunction(
         }[],
         contact: contact as LoadedContact | null,
         mailbox,
+        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
         sendWindow,
       };
     });
@@ -256,6 +267,10 @@ export const campaignEngine = inngest.createFunction(
       title: ctx.contact.title,
       lifecycle_stage: ctx.contact.lifecycle_stage,
       company: ctx.contact.companies?.name ?? "",
+      // Same for every step of this enrollment: sending identity + booking link.
+      sender_name: ctx.mailbox?.display_name ?? "",
+      sender_email: ctx.mailbox?.email ?? "",
+      booking_link: ctx.bookingUrl ?? "",
     };
     const from = ctx.mailbox
       ? `${ctx.mailbox.display_name ?? ""} <${ctx.mailbox.email}>`.trim()
@@ -386,7 +401,20 @@ export const campaignEngine = inngest.createFunction(
             track
           )
         );
-        return getEmailProvider().send({
+        // Load the sender row fresh (not carried in ctx) so encrypted tokens
+        // stay out of memoized step state and any refresh persisted by a prior
+        // send in this run is picked up. Address-only campaigns pass null and
+        // fall back to the global provider.
+        let sender: MailboxSender | null = null;
+        if (ctx.mailbox) {
+          const { data } = await admin
+            .from("mailboxes")
+            .select(MAILBOX_SENDER_COLUMNS)
+            .eq("id", ctx.mailbox.id)
+            .single();
+          sender = data as MailboxSender | null;
+        }
+        return sendViaMailbox(admin, sender, {
           from,
           to: email,
           subject,
@@ -493,7 +521,30 @@ export const workflowRun = inngest.createFunction(
         .eq("id", run.contact_id)
         .single();
       const sendWindow = await loadSendWindow(admin, run.org_id as string);
-      return { run, wf, contact, sendWindow };
+      const { data: orgRow } = await admin
+        .from("organizations")
+        .select("booking_url")
+        .eq("id", run.org_id as string)
+        .maybeSingle();
+      // A workflow sends through a single mailbox, so its sending identity is
+      // fixed for the whole run — resolve it once for the {{sender_*}} tokens.
+      let sender: { email: string; display_name: string | null } | null = null;
+      if (wf?.mailbox_id) {
+        const { data } = await admin
+          .from("mailboxes")
+          .select("email, display_name")
+          .eq("id", wf.mailbox_id)
+          .single();
+        sender = data;
+      }
+      return {
+        run,
+        wf,
+        contact,
+        sendWindow,
+        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
+        sender,
+      };
     });
 
     if (!ctx || !ctx.run || !ctx.wf || !ctx.contact) return { skipped: true };
@@ -512,6 +563,9 @@ export const workflowRun = inngest.createFunction(
       last_name: contact.last_name,
       email: contact.email,
       company: contact.companies?.name ?? "",
+      sender_name: ctx.sender?.display_name ?? "",
+      sender_email: ctx.sender?.email ?? "",
+      booking_link: ctx.bookingUrl ?? "",
     };
     let guard = 0;
     while (current && guard < 100) {
@@ -882,9 +936,22 @@ export const workflowRun = inngest.createFunction(
           );
         }
 
-        const res = await step.run(`node-send-${node.id}`, async () =>
-          getEmailProvider().send(outcome.send)
-        );
+        const res = await step.run(`node-send-${node.id}`, async () => {
+          // Load the sender row fresh so encrypted tokens stay out of memoized
+          // step state; null (no/address-only mailbox) falls back to the global
+          // provider.
+          let sender: MailboxSender | null = null;
+          const mailboxId = (ctx.wf as { mailbox_id: string | null }).mailbox_id;
+          if (mailboxId) {
+            const { data } = await admin
+              .from("mailboxes")
+              .select(MAILBOX_SENDER_COLUMNS)
+              .eq("id", mailboxId)
+              .single();
+            sender = data as MailboxSender | null;
+          }
+          return sendViaMailbox(admin, sender, outcome.send);
+        });
         await step.run(`node-record-${node.id}`, async () => {
           await admin.from("events").insert({
             org_id: orgId,
