@@ -101,9 +101,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-manrope);
-  --font-heading: var(--font-manrope);
-  --font-body: var(--font-lato);
+  --font-sans: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -168,8 +168,8 @@
     }
   :root {
     --radius: 0.625rem;
-    --font-heading: var(--font-manrope);
-    --font-body: var(--font-lato);
+    --font-heading: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
+    --font-body: var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
     --font-mono: var(--font-ibm-plex-mono);
   }
 
