@@ -87,17 +87,13 @@ import {
   type Workflow,
   type WorkflowGraph,
 } from "@/lib/workflows";
-import {
-  SEGMENT_FIELDS,
-  OPERATORS_FOR_KIND,
-  OPERATOR_LABELS,
-  VALUELESS_OPS,
-  fieldDef,
-  type Operator,
-} from "@/lib/segments";
+import { SegmentRuleFields } from "@/components/segment-rule-editor";
+import type { Operator, Rule } from "@/lib/segments";
 import { LIFECYCLE_STAGES, LIFECYCLE_LABELS, ACTIVITY_TYPES } from "@/lib/types";
 
 type Option = { id: string; name: string };
+/** Segment pickers need the type: only a static segment can be written to. */
+type SegmentOption = Option & { type: "static" | "dynamic" };
 type MailboxOption = {
   id: string;
   name: string;
@@ -180,7 +176,7 @@ export function WorkflowBuilder({
 }: {
   workflow?: Workflow;
   template?: WorkflowTemplate;
-  segments: Option[];
+  segments: SegmentOption[];
   campaigns: Option[];
   workflows: Option[];
   mailboxes: MailboxOption[];
@@ -331,6 +327,12 @@ export function WorkflowBuilder({
 
   const segmentName = React.useCallback(
     (id: string) => segments.find((s) => s.id === id)?.name ?? "segment",
+    [segments]
+  );
+
+  // Writable segments — see the "Add to segment" picker below.
+  const staticSegments = React.useMemo(
+    () => segments.filter((s) => s.type === "static"),
     [segments]
   );
 
@@ -1370,13 +1372,21 @@ export function WorkflowBuilder({
                     <SelectValue placeholder="Choose segment" />
                   </SelectTrigger>
                   <SelectContent>
-                    {segments.map((s) => (
+                    {/* Static only. A dynamic segment's membership is replaced
+                        wholesale by the hourly re-evaluation, so a contact added
+                        here would silently drop out again within the hour. */}
+                    {staticSegments.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {staticSegments.length
+                    ? "Only static segments can be added to — a dynamic segment's members come from its filter."
+                    : "You have no static segments yet. Create one on the Segments page first."}
+                </p>
               </div>
             )}
 
@@ -1646,7 +1656,7 @@ function WaitDelayFields({
   );
 }
 
-type BranchRule = { field: string; op: Operator; value?: string };
+type BranchRule = Rule;
 
 function normalizeRules(cfg: Record<string, unknown>): BranchRule[] {
   if (Array.isArray(cfg.rules)) return cfg.rules as BranchRule[];
@@ -1707,91 +1717,34 @@ function BranchConfig({
         </div>
       )}
 
-      {rules.map((rule, i) => {
-        const def = fieldDef(rule.field);
-        const kind = def?.kind ?? "text";
-        const showValue = !VALUELESS_OPS.includes(rule.op);
-        return (
-          <div key={i} className="space-y-2 rounded-md border p-2.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">
-                Condition {i + 1}
-              </Label>
-              {rules.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setRules(rules.filter((_, idx) => idx !== i))}
-                  className="text-muted-foreground hover:text-destructive"
-                  aria-label="Remove condition"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              )}
-            </div>
-            <Select
-              value={rule.field}
-              onValueChange={(v) => {
-                const k = fieldDef(v)?.kind ?? "text";
-                updateRule(i, { field: v, op: OPERATORS_FOR_KIND[k][0], value: "" });
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SEGMENT_FIELDS.map((f) => (
-                  <SelectItem key={f.key} value={f.key}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={rule.op}
-              onValueChange={(v) =>
-                updateRule(i, {
-                  op: v as Operator,
-                  value: VALUELESS_OPS.includes(v as Operator) ? undefined : rule.value ?? "",
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {OPERATORS_FOR_KIND[kind].map((o) => (
-                  <SelectItem key={o} value={o}>
-                    {OPERATOR_LABELS[o]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showValue &&
-              (kind === "enum" ? (
-                <Select
-                  value={String(rule.value ?? "")}
-                  onValueChange={(v) => updateRule(i, { value: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(def?.options ?? []).map((o) => (
-                      <SelectItem key={o} value={o}>
-                        {statusLabel(o)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={String(rule.value ?? "")}
-                  onChange={(e) => updateRule(i, { value: e.target.value })}
-                />
-              ))}
+      {rules.map((rule, i) => (
+        <div key={i} className="space-y-2 rounded-md border p-2.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">
+              Condition {i + 1}
+            </Label>
+            {rules.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setRules(rules.filter((_, idx) => idx !== i))}
+                className="text-muted-foreground hover:text-destructive"
+                aria-label="Remove condition"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            )}
           </div>
-        );
-      })}
+          {/* Shared with the segment builder so a new field kind or operator
+              (dates, "is any of") gets an editor in both places at once. */}
+          <SegmentRuleFields
+            rule={rule}
+            onChange={(patch) => updateRule(i, patch)}
+            idPrefix={`branch-rule-${i}`}
+            layout="stack"
+            showErrors
+          />
+        </div>
+      ))}
 
       <Button
         type="button"

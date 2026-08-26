@@ -3,9 +3,9 @@
 
 import {
   matchesDefinition,
-  fieldDef,
-  OPERATOR_LABELS,
-  VALUELESS_OPS,
+  parseDefinition,
+  describeRule,
+  ruleErrors,
   type EvaluableContact,
   type Operator,
   type Rule,
@@ -234,14 +234,7 @@ const str = (config: Config, key: string): string =>
  */
 export function branchDefinition(config: Config = {}): SegmentDefinition {
   if (Array.isArray((config as { rules?: unknown }).rules)) {
-    const rules = ((config as { rules: unknown[] }).rules).filter(
-      (r): r is Rule =>
-        !!r && typeof (r as Rule).field === "string" && !!(r as Rule).op
-    );
-    return {
-      match: (config as { match?: string }).match === "any" ? "any" : "all",
-      rules,
-    };
+    return parseDefinition(config);
   }
   const field = str(config, "field");
   const op = config.op as Operator | undefined;
@@ -317,16 +310,9 @@ export function actionConfigErrors(
         errors.push("Add at least one condition.");
         break;
       }
-      for (const r of def.rules) {
-        if (!r.op) {
-          errors.push("Choose a condition for each rule.");
-        } else if (
-          !VALUELESS_OPS.includes(r.op) &&
-          !String(r.value ?? "").trim()
-        ) {
-          errors.push("Enter a value for each condition.");
-        }
-      }
+      // Shared with the segment builder, so a set operator (value in `values`)
+      // or a date operator isn't reported as an unset text field.
+      for (const r of def.rules) errors.push(...ruleErrors(r));
       break;
     }
   }
@@ -366,13 +352,6 @@ export function formatMinutes(minutes: number): string {
     return `Wait ${h} hour${h > 1 ? "s" : ""}`;
   }
   return `Wait ${minutes} min`;
-}
-
-function describeRule(r: Rule): string {
-  const label = fieldDef(r.field)?.label ?? r.field;
-  const opLabel = OPERATOR_LABELS[r.op] ?? r.op;
-  if (VALUELESS_OPS.includes(r.op)) return `${label} ${opLabel}`;
-  return `${label} ${opLabel} ${r.value ?? ""}`.trim();
 }
 
 function describeCondition(config: Config): string {

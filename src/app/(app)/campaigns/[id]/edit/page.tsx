@@ -6,6 +6,7 @@ import { loadCampaignContacts } from "../../contact-options";
 import { loadEmailSnippets } from "@/lib/templates/queries";
 import type { Campaign, CampaignStep, Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 export default async function EditCampaignPage({
   params,
@@ -20,7 +21,7 @@ export default async function EditCampaignPage({
     { data: steps },
     { data: segments },
     { data: mailboxes },
-    { data: members },
+    members,
     contacts,
   ] = await Promise.all([
     supabase.from("campaigns").select("*").eq("id", id).maybeSingle(),
@@ -33,12 +34,24 @@ export default async function EditCampaignPage({
       .from("segments")
       .select("id, name, type")
       .eq("org_id", org.id)
+      // A campaign's own auto-managed audience list isn't a segment the user
+      // picks — it's the result of picking "contacts" or "import".
+      .eq("managed", false)
       .order("name"),
     supabase
       .from("mailboxes")
       .select("id, email, display_name, status")
       .eq("org_id", org.id),
-    supabase.from("segment_members").select("segment_id").eq("org_id", org.id),
+    // Paged: the counts beside each segment describe the whole org, and this
+    // crosses the 1000-row cap on total membership, not per segment.
+    fetchAllRows<{ segment_id: string }>((from, to) =>
+      supabase
+        .from("segment_members")
+        .select("segment_id, id")
+        .eq("org_id", org.id)
+        .order("id")
+        .range(from, to)
+    ),
     loadCampaignContacts(supabase, org.id),
   ]);
 
@@ -51,19 +64,21 @@ export default async function EditCampaignPage({
   // the currently-selected contacts, so the wizard can re-check them.
   let initialContactIds: string[] = [];
   if (c.audience_mode !== "segment" && c.segment_id) {
-    const { data: audienceMembers } = await supabase
-      .from("segment_members")
-      .select("contact_id")
-      .eq("segment_id", c.segment_id);
-    initialContactIds = (audienceMembers ?? []).map(
-      (m) => (m as { contact_id: string }).contact_id
+    const audienceMembers = await fetchAllRows<{ contact_id: string }>(
+      (from, to) =>
+        supabase
+          .from("segment_members")
+          .select("contact_id")
+          .eq("segment_id", c.segment_id as string)
+          .order("contact_id")
+          .range(from, to)
     );
+    initialContactIds = audienceMembers.map((m) => m.contact_id);
   }
 
   const countBySegment = new Map<string, number>();
-  for (const m of members ?? []) {
-    const sid = (m as { segment_id: string }).segment_id;
-    countBySegment.set(sid, (countBySegment.get(sid) ?? 0) + 1);
+  for (const m of members) {
+    countBySegment.set(m.segment_id, (countBySegment.get(m.segment_id) ?? 0) + 1);
   }
 
   const segmentOptions = (

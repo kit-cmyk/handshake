@@ -10,6 +10,7 @@ import type { EmailSnippet } from "@/components/rich-email-editor";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "../templates";
 
 type Option = { id: string; name: string };
+type SegmentOption = Option & { type: "static" | "dynamic" };
 type MailboxOption = {
   id: string;
   name: string;
@@ -27,7 +28,7 @@ export function NewWorkflow({
   initialTemplate = null,
   emailTemplates,
 }: {
-  segments: Option[];
+  segments: SegmentOption[];
   campaigns: Option[];
   workflows: Option[];
   mailboxes: MailboxOption[];
