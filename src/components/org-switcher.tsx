@@ -44,7 +44,7 @@ export function OrgSwitcher({
 
   if (orgs.length <= 1) {
     return (
-      <div className="flex w-full items-center px-2.5 py-2 sidebar-collapsed:justify-center sidebar-collapsed:px-0">
+      <div className="flex w-full items-center px-2.5 py-2 sidebar-collapsed:justify-center sidebar-collapsed:p-1">
         {face}
       </div>
     );
@@ -58,7 +58,7 @@ export function OrgSwitcher({
           disabled={pending}
           aria-label="Switch workspace"
           title={`Workspace: ${name}`}
-          className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-60 sidebar-collapsed:justify-center sidebar-collapsed:px-0"
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-60 sidebar-collapsed:justify-center sidebar-collapsed:p-1"
         >
           {face}
           <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/70 sidebar-collapsed:hidden" />
