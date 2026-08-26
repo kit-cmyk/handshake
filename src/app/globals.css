@@ -398,3 +398,142 @@
   height: 0;
   pointer-events: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Marketing pages — "editorial" panel palette.
+
+   The landing page is built from full-bleed rounded panels that read like
+   printed spreads: deep navy ink carrying oversized cream display type, with
+   the brand blue kept back as an accent. These two colors are deliberately NOT
+   theme-aware — a panel here behaves like a photograph, so it stays dark in
+   both light and dark mode (the page *ground* around it still follows the
+   theme). Defining them once in :root, with no .dark override, is the point.
+--------------------------------------------------------------------------- */
+:root {
+  --landing-ink: oklch(0.17 0.028 264);
+  --landing-cream: #e1e0cc;
+}
+
+@theme inline {
+  --color-landing-ink: var(--landing-ink);
+  --color-landing-cream: var(--landing-cream);
+}
+
+/* Film grain for the editorial panels. Unlike the alpha-masked noise in
+   `noise-background.tsx` (which punches a color through as a mask), this one is
+   a flat *grayscale* tile meant to be composited with `mix-blend-overlay`, so
+   the speckles both lighten and darken whatever sits underneath. Desaturating
+   feTurbulence's natively-colorful output is what makes that work — an
+   un-desaturated tile would tint the panel rainbow under `overlay`. */
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+  background-repeat: repeat;
+}
+
+/* CSS-driven variant of the word "pull up" reveal (see `words-pull-up.tsx`).
+
+   The hero wordmark is the landing page's LCP element. Driving its entrance
+   from JS means it is server-rendered at `opacity: 0` and only becomes visible
+   once React hydrates, which pushes LCP out to the hydration boundary. Running
+   the same reveal as a plain CSS animation instead lets it paint and play as
+   soon as the stylesheet lands — no JS on the critical path. Per-word stagger
+   comes from an inline `animation-delay`. */
+@keyframes landing-word-pull-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.word-pull-up {
+  /* `both` holds the from-state through the delay so staggered words do not
+     flash in before their turn. */
+  animation: landing-word-pull-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Dropping the animation also drops its fill, so words sit at their natural
+     (visible) resting state. */
+  .word-pull-up {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Marketing page ground.
+
+   The landing page is a warm-cream-on-ink editorial spread, but the app's
+   default surfaces are a cool lavender-grey (hue ~271) tuned for dense CRM
+   screens. Placed side by side those cool surfaces visibly fight the hero's
+   warm cream, which is what makes the sections below the hero read as
+   "disconnected".
+
+   Rather than swapping utility classes on every marketing element — which would
+   leave shared components like `FeatureTabs` on the old cool surfaces — this
+   re-points the *same* token names to a warmer set, scoped to a wrapper class.
+   Every descendant, shared components included, picks the new surfaces up for
+   free.
+
+   Light mode shifts the neutrals toward the cream's hue; dark mode pulls them
+   toward `--landing-ink` so the ink panels read as part of the ground rather
+   than pasted on top of it. Foreground and primary tokens are deliberately left
+   alone: text contrast and the brand blue stay exactly as designed. */
+.landing-ground {
+  --background: oklch(0.962 0.009 96);
+  --card: oklch(0.983 0.007 96);
+  --muted: oklch(0.945 0.012 96);
+  --secondary: oklch(0.928 0.014 96);
+  --accent: oklch(0.949 0.016 96);
+  --border: oklch(0.892 0.013 96);
+  --input: oklch(0.905 0.011 96);
+  /* Nudged slightly darker than the app default while warming, so body copy on
+     the lighter ivory keeps at least as much contrast as it had. */
+  --muted-foreground: oklch(0.52 0.017 80);
+}
+
+.dark .landing-ground {
+  --background: oklch(0.215 0.026 264);
+  --card: oklch(0.252 0.028 264);
+  --muted: oklch(0.285 0.028 264);
+  --secondary: oklch(0.32 0.032 264);
+  --accent: oklch(0.31 0.034 264);
+  --border: oklch(0.325 0.032 264);
+  --input: oklch(0.325 0.032 264);
+}
+
+/* App screenshots embedded in marketing panels.
+
+   The "screenshots" on the landing page are the real app UI rendered as markup
+   (`app-preview.tsx`), not captured images — so unlike a PNG they would other-
+   wise re-theme with the page, and inherit the warm `.landing-ground` surfaces
+   on top of that. Dark app chrome sitting on a dark ink bento card loses almost
+   all its edges, and a warm-tinted "screenshot" stops looking like a screenshot.
+
+   Pinning the app's own light palette locally makes these read the way a real
+   captured image would: a bright, true-to-product screen on a dark card, in
+   both themes. Values are the app's light `:root` tokens verbatim — keep them
+   in sync if the light theme is retuned. */
+.app-shot {
+  --background: oklch(0.9555 0.0125 271.28);
+  --foreground: oklch(0.21 0.03 264.67);
+  --card: oklch(0.9793 0.0083 271.33);
+  --card-foreground: oklch(0.21 0.03 264.67);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.03 264.67);
+  --secondary: oklch(0.9142 0.0208 274.02);
+  --secondary-foreground: oklch(0.37 0.03 259.73);
+  --muted: oklch(0.9443 0.0165 274.82);
+  --muted-foreground: oklch(0.55 0.02 264.37);
+  --accent: oklch(0.95 0.02 261.78);
+  --accent-foreground: oklch(0.48 0.20 260.48);
+  --border: oklch(0.8893 0.0169 259.42);
+  --input: oklch(0.9002 0.013 266.69);
+  --primary: oklch(0.48 0.20 260.48);
+  --primary-foreground: oklch(1 0 0);
+  color: var(--foreground);
+}
