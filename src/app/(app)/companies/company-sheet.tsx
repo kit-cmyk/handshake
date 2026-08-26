@@ -192,6 +192,7 @@ export function CompanySheet({
             {editing ? (
               <CompanyForm
                 company={c}
+                categories={profile?.categories}
                 onCancel={() => setEditing(false)}
                 onSuccess={() => {
                   setEditing(false);

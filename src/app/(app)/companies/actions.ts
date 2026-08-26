@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import { mergeCompanyCategories } from "@/lib/company-categories";
 import type { Company, Contact } from "@/lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FormState = {
   ok?: boolean;
@@ -26,12 +29,47 @@ export type CompanyProfile = {
     stage: string | null;
     pipeline: string | null;
   }[];
+  /** Built-in categories plus the ones in use, for the edit form's combobox. */
+  categories: string[];
 };
+
+/**
+ * The option list behind the category combobox: the built-in defaults unioned
+ * with every distinct category the org's companies actually use. Paged,
+ * because the picker has to see every value in use, not just the ones on the
+ * first 1000 companies.
+ */
+async function categoryOptions(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<string[]> {
+  const rows = await fetchAllRows<{ category: string | null }>((from, to) =>
+    supabase
+      .from("companies")
+      .select("id, category")
+      .eq("org_id", orgId)
+      .not("category", "is", null)
+      // `id` makes the sort deterministic; category alone is not unique, and a
+      // non-deterministic sort can drop or repeat rows across page boundaries.
+      .order("category")
+      .order("id")
+      .range(from, to)
+  );
+  return mergeCompanyCategories(
+    rows.map((r) => r.category ?? "").filter(Boolean)
+  );
+}
+
+/** Server-action wrapper around {@link categoryOptions}. */
+export async function listCompanyCategories(): Promise<string[]> {
+  const { supabase, org } = await requireContext();
+  return categoryOptions(supabase, org.id);
+}
 
 export async function getCompanyProfile(
   id: string
 ): Promise<CompanyProfile | null> {
-  const { supabase } = await requireContext();
+  const { supabase, org } = await requireContext();
 
   const { data: company } = await supabase
     .from("companies")
@@ -40,7 +78,7 @@ export async function getCompanyProfile(
     .single();
   if (!company) return null;
 
-  const [{ data: contacts }, { data: deals }] = await Promise.all([
+  const [{ data: contacts }, { data: deals }, categories] = await Promise.all([
     supabase
       .from("contacts")
       .select("id, first_name, last_name, email, lifecycle_stage")
@@ -51,6 +89,7 @@ export async function getCompanyProfile(
       .select("id, title, value, status, stages(name), pipelines(name)")
       .eq("company_id", id)
       .order("created_at", { ascending: false }),
+    categoryOptions(supabase, org.id),
   ]);
 
   // Supabase types nested relations as arrays; narrow to the single joined row.
@@ -68,6 +107,7 @@ export async function getCompanyProfile(
       stage: one<{ name: string }>(d.stages)?.name ?? null,
       pipeline: one<{ name: string }>(d.pipelines)?.name ?? null,
     })),
+    categories,
   };
 }
 
