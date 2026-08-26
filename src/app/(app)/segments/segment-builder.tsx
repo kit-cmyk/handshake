@@ -30,6 +30,7 @@ import {
 } from "./actions";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import type { LifecycleStage } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 import {
   SEGMENT_FIELDS,
   OPERATORS_FOR_KIND,
@@ -221,7 +222,7 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
                         <SelectContent>
                           {(def?.options ?? []).map((o) => (
                             <SelectItem key={o} value={o}>
-                              {o}
+                              {statusLabel(o)}
                             </SelectItem>
                           ))}
                         </SelectContent>

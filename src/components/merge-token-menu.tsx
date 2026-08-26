@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Braces, ChevronDown } from "lucide-react";
+import { Braces, Check, ChevronDown, Copy } from "lucide-react";
 import { MERGE_TOKEN_GROUPS } from "@/lib/email/template";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
  *
  * Two presentations of the same menu: `button` sits next to a field (subject
  * line, campaign step), `toolbar` sits inside the rich editor's toolbar strip.
+ *
+ * Each row also carries a copy button, for pasting a shortcode somewhere the
+ * caret isn't — a different field, another draft, a template kept elsewhere.
+ * Copying leaves the menu open so several can be grabbed in one visit.
  */
 export function MergeTokenMenu({
   onInsert,
@@ -35,8 +39,22 @@ export function MergeTokenMenu({
   align?: "start" | "end";
   className?: string;
 }) {
+  const [copied, setCopied] = React.useState<string | null>(null);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function copy(token: string) {
+    try {
+      await navigator.clipboard.writeText(`{{${token}}}`);
+    } catch {
+      return; /* clipboard unavailable */
+    }
+    setCopied(token);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(null), 1500);
+  }
+
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => !open && setCopied(null)}>
       <DropdownMenuTrigger asChild>
         {variant === "toolbar" ? (
           <button
@@ -61,11 +79,35 @@ export function MergeTokenMenu({
             {gi > 0 && <DropdownMenuSeparator />}
             <DropdownMenuLabel>{g.group}</DropdownMenuLabel>
             {g.tokens.map((t) => (
-              <DropdownMenuItem key={t.token} onSelect={() => onInsert(t.token)}>
+              <DropdownMenuItem
+                key={t.token}
+                className="pr-1"
+                onSelect={() => onInsert(t.token)}
+              >
                 {t.label}
-                <span className="ml-1 font-mono text-xs text-muted-foreground">
+                <span className="ml-auto font-mono text-xs text-muted-foreground">
                   {`{{${t.token}}}`}
                 </span>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={`Copy {{${t.token}}}`}
+                  title={`Copy {{${t.token}}}`}
+                  className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+                  onClick={(e) => {
+                    // Keep the click off the row so copying neither inserts the
+                    // token nor closes the menu.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    copy(t.token);
+                  }}
+                >
+                  {copied === t.token ? (
+                    <Check className="size-3.5" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                </button>
               </DropdownMenuItem>
             ))}
           </React.Fragment>

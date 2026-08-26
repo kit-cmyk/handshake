@@ -46,11 +46,12 @@ export function WorkspaceForm({
           className="max-w-sm"
         />
         <p className="text-xs text-muted-foreground">
-          Your scheduling URL. Insert it into any email with the{" "}
+          The workspace scheduling URL behind the{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
             {"{{booking_link}}"}
           </code>{" "}
-          field so recipients can book a time.
+          field. Members who set their own link under Settings &#9656; Profile
+          send theirs instead.
         </p>
       </div>
       <div aria-live="polite">

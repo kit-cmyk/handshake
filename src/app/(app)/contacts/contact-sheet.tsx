@@ -31,6 +31,7 @@ import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { ContactForm } from "./contact-form";
 import { contactName, formatAddress } from "@/lib/types";
 import { getContactProfile, deleteContact, type ContactProfile } from "./actions";
+import { statusLabel } from "@/lib/utils";
 
 type CompanyOption = { id: string; name: string };
 
@@ -268,7 +269,7 @@ export function ContactSheet({
                           </span>
                         )}
                         <Badge variant={statusVariant(d.status)}>
-                          {d.status}
+                          {statusLabel(d.status)}
                         </Badge>
                       </div>
                     </li>
@@ -312,7 +313,7 @@ export function ContactSheet({
                         </p>
                       </div>
                       <Badge variant={statusVariant(e.status)}>
-                        {e.status}
+                        {statusLabel(e.status)}
                       </Badge>
                     </li>
                   ))}
@@ -337,7 +338,7 @@ export function ContactSheet({
                         </p>
                       </div>
                       <Badge variant={statusVariant(w.status)}>
-                        {w.status}
+                        {statusLabel(w.status)}
                       </Badge>
                     </li>
                   ))}

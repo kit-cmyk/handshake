@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/empty-state";
 import { CampaignStatusMenu } from "./campaign-status-menu";
 import { bulkDeleteCampaigns } from "./actions";
 import type { CampaignStatus } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 export type CampaignRow = {
   id: string;
@@ -71,7 +72,7 @@ export function CampaignsTable({ data }: { data: CampaignRow[] }) {
         header: "Status",
         cell: ({ row }) => (
           <Badge variant={STATUS_VARIANT[row.original.status]}>
-            {row.original.status}
+            {statusLabel(row.original.status)}
           </Badge>
         ),
       },
@@ -122,8 +123,8 @@ export function CampaignsTable({ data }: { data: CampaignRow[] }) {
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s}
+              <SelectItem key={s} value={s}>
+                {statusLabel(s)}
               </SelectItem>
             ))}
           </SelectContent>

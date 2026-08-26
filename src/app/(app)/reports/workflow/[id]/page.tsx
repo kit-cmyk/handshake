@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { parseGraph } from "@/lib/workflows";
+import { statusLabel } from "@/lib/utils";
 import {
   computeWorkflowReport,
   type RunLite,
@@ -88,7 +89,7 @@ export default async function WorkflowReportPage({
       <PageHeader
         back="reports"
         title={workflow.name}
-        badge={<Badge variant="secondary">{workflow.status}</Badge>}
+        badge={<Badge variant="secondary">{statusLabel(workflow.status)}</Badge>}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href={`/workflows/${id}`}>

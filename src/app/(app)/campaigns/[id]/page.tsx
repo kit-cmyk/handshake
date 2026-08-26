@@ -15,6 +15,7 @@ import { CampaignSequence, type SequenceStep } from "./campaign-sequence";
 import { CampaignTabs } from "./campaign-tabs";
 import { CampaignPerformance } from "@/components/campaign-performance";
 import { computeFunnel, type EventLite, type StepInfo } from "@/lib/funnel";
+import { statusLabel } from "@/lib/utils";
 import {
   type Campaign,
   type CampaignStep,
@@ -207,7 +208,11 @@ export default async function CampaignDetailPage({
       <PageHeader
         back="campaigns"
         title={c.name}
-        badge={<Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge>}
+        badge={
+          <Badge variant={STATUS_VARIANT[c.status]}>
+            {statusLabel(c.status)}
+          </Badge>
+        }
         actions={
           <>
             <CampaignStatusMenu
