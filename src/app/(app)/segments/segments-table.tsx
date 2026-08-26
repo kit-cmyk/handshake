@@ -34,6 +34,7 @@ import { EmptyState } from "@/components/empty-state";
 import { SegmentSheet } from "./segment-sheet";
 import { bulkDeleteSegments, deleteSegment, refreshSnapshot } from "./actions";
 import { parseDefinition, type Segment } from "@/lib/segments";
+import { statusLabel } from "@/lib/utils";
 
 export type SegmentRow = {
   id: string;
@@ -70,7 +71,7 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
           <Badge
             variant={row.original.type === "dynamic" ? "default" : "secondary"}
           >
-            {row.original.type}
+            {statusLabel(row.original.type)}
           </Badge>
         ),
       },

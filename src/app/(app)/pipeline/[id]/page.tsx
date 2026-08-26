@@ -23,6 +23,7 @@ import { DeleteDealButton } from "./delete-deal-button";
 import { DealQuickActions } from "../deal-quick-actions";
 import { DealTimeline } from "../deal-timeline";
 import { contactName, DEAL_PRIORITY_LABELS, type DealPriority } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 function money(v: number | null): string {
   if (v == null) return "—";
@@ -101,7 +102,9 @@ export default async function DealDetailPage({
             <span className="text-xl font-semibold text-foreground">
               {money(d.value)}
             </span>
-            <Badge variant={STATUS_VARIANT[d.status]}>{d.status}</Badge>
+            <Badge variant={STATUS_VARIANT[d.status]}>
+              {statusLabel(d.status)}
+            </Badge>
             <Badge variant={PRIORITY_VARIANT[d.priority]}>
               {DEAL_PRIORITY_LABELS[d.priority]} priority
             </Badge>

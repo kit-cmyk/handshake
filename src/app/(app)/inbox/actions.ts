@@ -10,6 +10,7 @@ import {
   type MailboxSender,
 } from "@/lib/email/send";
 import { renderTemplate, type MergeContact } from "@/lib/email/template";
+import { resolveBookingLink } from "@/lib/email/booking-link";
 import { wrapEmail } from "@/lib/email/layout";
 import { makeSnippet } from "@/lib/inbox/inbound";
 import { resolveCopyList } from "@/lib/email/recipients";
@@ -138,17 +139,16 @@ async function deliverEmail(params: {
     params.supabase,
     params.orgId
   );
-  const { data: orgRow } = await params.supabase
-    .from("organizations")
-    .select("booking_url")
-    .eq("id", params.orgId)
-    .maybeSingle();
+  const bookingLink = await resolveBookingLink(params.supabase, {
+    orgId: params.orgId,
+    userId: params.userId,
+  });
 
   const merge: MergeContact = {
     ...params.merge,
     sender_name: senderName,
     sender_email: senderEmail,
-    booking_link: (orgRow?.booking_url as string | null) ?? "",
+    booking_link: bookingLink,
   };
   const renderedSubject = renderTemplate(params.subject, merge);
   const renderedHtml = renderTemplate(params.bodyHtml, merge);

@@ -164,18 +164,37 @@ export const DESTINATIONS: Record<NavKey, Destination> = {
   },
 };
 
-/** Sidebar order — the app's primary destinations, in funnel order. */
+/**
+ * Sidebar order — the app's primary destinations, in funnel order, grouped by
+ * the job they do. The first group is deliberately unlabelled: Dashboard is
+ * where the day starts, so it reads as the top of the list rather than as a
+ * section of its own. Settings sits in its own trailing group, pinned to the
+ * bottom of the sidebar above the workspace switcher.
+ */
+export type NavGroup = {
+  /** Section heading; `null` renders the items with no heading above them. */
+  label: string | null;
+  items: NavKey[];
+};
+
+export const NAV_GROUPS: NavGroup[] = [
+  { label: null, items: ["dashboard"] },
+  { label: "Records", items: ["leads", "contacts", "companies", "segments"] },
+  {
+    label: "Outreach",
+    items: ["inbox", "campaigns", "workflows", "templates"],
+  },
+  { label: "Results", items: ["pipeline", "reports"] },
+];
+
+/** The group pinned to the bottom of the sidebar, below the scrolling nav. */
+export const NAV_FOOTER_GROUP: NavGroup = {
+  label: null,
+  items: ["settings"],
+};
+
+/** Flat sidebar order, derived so grouping stays the single source of truth. */
 export const PRIMARY_NAV: NavKey[] = [
-  "dashboard",
-  "inbox",
-  "leads",
-  "contacts",
-  "companies",
-  "pipeline",
-  "segments",
-  "campaigns",
-  "workflows",
-  "templates",
-  "reports",
-  "settings",
+  ...NAV_GROUPS.flatMap((g) => g.items),
+  ...NAV_FOOTER_GROUP.items,
 ];

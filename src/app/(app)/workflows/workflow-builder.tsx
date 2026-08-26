@@ -57,7 +57,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 import {
   nodeTypes,
   edgeTypes,
@@ -1093,7 +1093,7 @@ export function WorkflowBuilder({
                         <SelectItem value="any">Any activity</SelectItem>
                         {ACTIVITY_TYPES.map((a) => (
                           <SelectItem key={a} value={a}>
-                            {a[0].toUpperCase() + a.slice(1)}
+                            {statusLabel(a)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1778,7 +1778,7 @@ function BranchConfig({
                   <SelectContent>
                     {(def?.options ?? []).map((o) => (
                       <SelectItem key={o} value={o}>
-                        {o}
+                        {statusLabel(o)}
                       </SelectItem>
                     ))}
                   </SelectContent>

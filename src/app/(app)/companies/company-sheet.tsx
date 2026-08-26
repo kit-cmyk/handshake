@@ -29,6 +29,7 @@ import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { CompanyForm } from "./company-form";
 import { getCompanyProfile, deleteCompany, type CompanyProfile } from "./actions";
 import { contactName, formatAddress } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 function money(v: number | null): string {
   if (v == null) return "";
@@ -260,7 +261,7 @@ export function CompanySheet({
                               </span>
                             )}
                             <Badge variant={statusVariant(d.status)}>
-                              {d.status}
+                              {statusLabel(d.status)}
                             </Badge>
                           </div>
                         </li>

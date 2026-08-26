@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Lexend, IBM_Plex_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ThemeProvider, themeScript } from "@/components/theme-provider";
+import { sidebarScript } from "@/lib/sidebar-state";
 import "./globals.css";
 
 // Outfit (display/headings) + Lexend (body) are both variable fonts, so no
@@ -47,6 +48,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: sidebarScript }} />
       </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>

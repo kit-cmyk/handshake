@@ -35,6 +35,52 @@ export async function updateProfile(
   return { ok: true, message: "Profile updated." };
 }
 
+/**
+ * Your personal scheduling URL. It fills the {{booking_link}} merge token on
+ * anything you send, overriding the workspace-wide link; clearing it falls back
+ * to the workspace link (Settings ▸ Workspace).
+ */
+export async function updateBookingLink(
+  _prev: AccountState,
+  fd: FormData
+): Promise<AccountState> {
+  const raw = String(fd.get("booking_url") ?? "").trim();
+  if (raw && !isValidHttpUrl(raw))
+    return {
+      error: "Booking link must be a full URL starting with https://.",
+      field: "booking_url",
+    };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ booking_url: raw || null })
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/profile");
+  return {
+    ok: true,
+    message: raw
+      ? "Booking link saved."
+      : "Booking link cleared — emails now use the workspace link.",
+  };
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const AVATAR_EXT: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",

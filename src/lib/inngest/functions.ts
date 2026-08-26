@@ -15,6 +15,7 @@ import {
   type MailboxSender,
 } from "@/lib/email/send";
 import { renderTemplate, withUnsubscribe } from "@/lib/email/template";
+import { resolveBookingLink } from "@/lib/email/booking-link";
 import { wrapEmail } from "@/lib/email/layout";
 import {
   withOpenPixel,
@@ -217,6 +218,7 @@ export const campaignEngine = inngest.createFunction(
         email: string;
         display_name: string | null;
         daily_limit: number;
+        user_id: string | null;
       } | null = null;
       const { data: campaign } = await admin
         .from("campaigns")
@@ -226,17 +228,17 @@ export const campaignEngine = inngest.createFunction(
       if (campaign?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("id, email, display_name, daily_limit")
+          .select("id, email, display_name, daily_limit, user_id")
           .eq("id", campaign.mailbox_id)
           .single();
         mailbox = data;
       }
       const sendWindow = await loadSendWindow(admin, enr.org_id as string);
-      const { data: orgRow } = await admin
-        .from("organizations")
-        .select("booking_url")
-        .eq("id", enr.org_id as string)
-        .maybeSingle();
+      // The mailbox owner's own calendar link, falling back to the org's.
+      const bookingUrl = await resolveBookingLink(admin, {
+        orgId: enr.org_id as string,
+        userId: mailbox?.user_id,
+      });
       return {
         orgId: enr.org_id as string,
         campaignId: enr.campaign_id as string,
@@ -252,7 +254,7 @@ export const campaignEngine = inngest.createFunction(
         }[],
         contact: contact as LoadedContact | null,
         mailbox,
-        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
+        bookingUrl,
         sendWindow,
       };
     });
@@ -521,28 +523,32 @@ export const workflowRun = inngest.createFunction(
         .eq("id", run.contact_id)
         .single();
       const sendWindow = await loadSendWindow(admin, run.org_id as string);
-      const { data: orgRow } = await admin
-        .from("organizations")
-        .select("booking_url")
-        .eq("id", run.org_id as string)
-        .maybeSingle();
       // A workflow sends through a single mailbox, so its sending identity is
       // fixed for the whole run — resolve it once for the {{sender_*}} tokens.
-      let sender: { email: string; display_name: string | null } | null = null;
+      let sender: {
+        email: string;
+        display_name: string | null;
+        user_id: string | null;
+      } | null = null;
       if (wf?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("email, display_name")
+          .select("email, display_name, user_id")
           .eq("id", wf.mailbox_id)
           .single();
         sender = data;
       }
+      // The mailbox owner's own calendar link, falling back to the org's.
+      const bookingUrl = await resolveBookingLink(admin, {
+        orgId: run.org_id as string,
+        userId: sender?.user_id,
+      });
       return {
         run,
         wf,
         contact,
         sendWindow,
-        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
+        bookingUrl,
         sender,
       };
     });

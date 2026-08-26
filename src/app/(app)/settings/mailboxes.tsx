@@ -19,6 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { addMailbox, deleteMailbox, type MailboxState } from "./actions";
 import type { Mailbox } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 const PROVIDER_LABELS: Record<string, string> = {
   resend: "Resend",
@@ -125,7 +126,7 @@ export function Mailboxes({
                   ))}
                 {!connected && (
                   <Badge variant={m.status === "active" ? "success" : "secondary"}>
-                    {m.status}
+                    {statusLabel(m.status)}
                   </Badge>
                 )}
                 <ConfirmDialog

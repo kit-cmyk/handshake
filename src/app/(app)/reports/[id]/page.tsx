@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { CampaignPerformance } from "@/components/campaign-performance";
 import { computeFunnel, type EventLite, type StepInfo } from "@/lib/funnel";
 import type { Campaign } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 export default async function CampaignReportPage({
   params,
@@ -53,7 +54,7 @@ export default async function CampaignReportPage({
       <PageHeader
         back="reports"
         title={c.name}
-        badge={<Badge variant="secondary">{c.status}</Badge>}
+        badge={<Badge variant="secondary">{statusLabel(c.status)}</Badge>}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href={`/campaigns/${c.id}`}>

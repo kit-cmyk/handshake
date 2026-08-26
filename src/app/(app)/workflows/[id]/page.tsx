@@ -16,6 +16,7 @@ import { WorkflowStatusMenu } from "./workflow-status-menu";
 import { WorkflowActions } from "./workflow-actions";
 import { WorkflowTabs } from "./workflow-tabs";
 import { WorkflowSteps, type StepItem } from "./workflow-steps";
+import { statusLabel } from "@/lib/utils";
 import {
   parseGraph,
   parseExitConfig,
@@ -228,7 +229,11 @@ export default async function WorkflowDetailPage({
       <PageHeader
         back="workflows"
         title={w.name}
-        badge={<Badge variant={STATUS_VARIANT[w.status]}>{w.status}</Badge>}
+        badge={
+          <Badge variant={STATUS_VARIANT[w.status]}>
+            {statusLabel(w.status)}
+          </Badge>
+        }
         actions={
           <>
             <WorkflowStatusMenu

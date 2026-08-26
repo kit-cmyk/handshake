@@ -11,6 +11,7 @@ import {
   updatePasswordSettings,
   updateAvatar,
   removeAvatar,
+  updateBookingLink,
   type AccountState,
 } from "./account-actions";
 
@@ -101,6 +102,52 @@ export function ProfileForm({ fullName }: { fullName: string }) {
       <Status state={state} />
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving…" : "Save profile"}
+      </Button>
+    </form>
+  );
+}
+
+export function BookingLinkForm({
+  bookingUrl,
+  workspaceBookingUrl,
+}: {
+  bookingUrl: string;
+  workspaceBookingUrl: string;
+}) {
+  const [state, action, pending] = useActionState<AccountState, FormData>(
+    updateBookingLink,
+    {}
+  );
+  return (
+    <form action={action} className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="booking_url">Your booking link</Label>
+        <Input
+          id="booking_url"
+          name="booking_url"
+          type="url"
+          inputMode="url"
+          placeholder="https://cal.com/you/30min"
+          defaultValue={bookingUrl}
+          className="max-w-sm"
+        />
+        <p className="text-xs text-muted-foreground">
+          Paste the link to your calendar (Calendly, cal.com, Google
+          appointments…). Insert it into any email with the{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+            {"{{booking_link}}"}
+          </code>{" "}
+          field and recipients book straight into your calendar.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {workspaceBookingUrl
+            ? `Leave it empty to use the workspace link (${workspaceBookingUrl}).`
+            : "Leave it empty to use the workspace link, set under Settings ▸ Workspace."}
+        </p>
+      </div>
+      <Status state={state} />
+      <Button type="submit" size="sm" disabled={pending}>
+        {pending ? "Saving…" : "Save booking link"}
       </Button>
     </form>
   );
