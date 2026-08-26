@@ -11,8 +11,10 @@ import {
   fieldErrorProps,
   errorFor,
 } from "@/components/ui/field-error";
+import { Combobox } from "@/components/ui/combobox";
 import { SheetFooter } from "@/components/ui/sheet";
 import { saveCompany, type FormState } from "./actions";
+import { DEFAULT_COMPANY_CATEGORIES } from "@/lib/company-categories";
 import type { Company } from "@/lib/types";
 
 function Field({
@@ -50,10 +52,16 @@ function Field({
 /** Editable company form, shared by the create/edit sheet and the side sheet. */
 export function CompanyForm({
   company,
+  categories = DEFAULT_COMPANY_CATEGORIES,
   onSuccess,
   onCancel,
 }: {
   company?: Company;
+  /**
+   * Options for the category combobox — built-ins unioned with the org's own,
+   * as `listCompanyCategories` returns. Falls back to the built-ins alone.
+   */
+  categories?: string[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }) {
@@ -61,6 +69,9 @@ export function CompanyForm({
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     saveCompany,
     {}
+  );
+  const [category, setCategory] = React.useState<string>(
+    company?.category ?? ""
   );
 
   React.useEffect(() => {
@@ -73,20 +84,29 @@ export function CompanyForm({
   return (
     <form action={formAction} className="space-y-4">
       {company && <input type="hidden" name="id" value={company.id} />}
+      <input type="hidden" name="category" value={category} />
 
       <Field name="name" label="Name" defaultValue={company?.name} 
           error={errorFor(state, "name", "name")}
         />
 
       <div className="grid grid-cols-2 gap-3">
-        <Field
-          name="category"
-          label="Category (local)"
-          defaultValue={company?.category}
-          placeholder="e.g. Dentist"
-        
-          error={errorFor(state, "category", "name")}
-        />
+        <div className="space-y-2">
+          <Label htmlFor="category">Category (local)</Label>
+          <Combobox
+            id="category"
+            value={category}
+            onValueChange={setCategory}
+            options={categories}
+            placeholder="Select or add a category"
+            searchPlaceholder="Search or type to create…"
+            emptyText="Type to create a new category."
+            allowCreate
+          />
+          <FieldError id="category">
+            {errorFor(state, "category", "name")}
+          </FieldError>
+        </div>
         <Field
           name="industry"
           label="Industry (B2B)"
