@@ -253,15 +253,6 @@
 
 /* Playful empty-state / status-screen motion */
 @layer utilities {
-  @keyframes hs-float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-6px);
-    }
-  }
   @keyframes hs-wave {
     0%,
     60%,
@@ -310,9 +301,6 @@
       transform: scale(1.1);
     }
   }
-  .animate-hs-float {
-    animation: hs-float 3.6s ease-in-out infinite;
-  }
   .animate-hs-wave {
     animation: hs-wave 2.4s ease-in-out infinite;
     transform-origin: 75% 75%;
@@ -327,7 +315,6 @@
     animation: hs-twinkle 2s ease-in-out infinite;
   }
   @media (prefers-reduced-motion: reduce) {
-    .animate-hs-float,
     .animate-hs-wave,
     .animate-hs-ping,
     .animate-hs-pop,
