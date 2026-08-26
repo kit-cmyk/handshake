@@ -135,7 +135,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary to-primary/70 p-6 text-primary-foreground shadow-lg shadow-primary/20 sm:p-8">
-        <div className="animate-hs-float pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-12 right-24 size-32 rounded-full bg-white/5 blur-2xl" />
         <div className="relative flex items-center gap-3">
           <span className="animate-hs-wave grid size-11 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
@@ -160,7 +160,7 @@ export default async function DashboardPage() {
           <Link key={s.key} href={href} className="group">
             <Card
               className={cn(
-                "relative h-full overflow-hidden ring-1 ring-inset transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md",
+                "relative h-full overflow-hidden ring-1 ring-inset transition-all duration-200 group-hover:shadow-md",
                 s.ring,
               )}
             >
@@ -209,7 +209,7 @@ export default async function DashboardPage() {
             const { href, icon: Icon } = DESTINATIONS[a.to];
             return (
             <Link key={a.to + a.label} href={href} className="group">
-              <Card className="flex h-full items-center gap-4 p-4 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md">
+              <Card className="flex h-full items-center gap-4 p-4 transition-all duration-200 group-hover:border-primary/30 group-hover:shadow-md">
                 <span
                   className={cn(
                     "grid size-10 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-105",
