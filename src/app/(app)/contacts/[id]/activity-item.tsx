@@ -23,7 +23,14 @@ const ICON: Record<ActivityType, typeof StickyNote> = {
   appointment: CalendarClock,
 };
 
-export function ActivityItem({ activity }: { activity: Activity }) {
+export function ActivityItem({
+  activity,
+  onChanged,
+}: {
+  activity: Activity;
+  /** See `ActivityComposer.onSaved` — keeps the side sheet in sync. */
+  onChanged?: () => void;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const Icon = ICON[activity.type];
@@ -38,6 +45,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
               start(async () => {
                 await toggleTaskDone(activity.id, activity.contact_id!, !done);
                 router.refresh();
+                onChanged?.();
               })
             }
             disabled={pending}
@@ -90,6 +98,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
         onConfirm={async () => {
           await deleteActivity(activity.id, activity.contact_id!);
           router.refresh();
+          onChanged?.();
         }}
       />
     </li>

@@ -34,7 +34,18 @@ const LABELS: Record<ActivityType, string> = {
   appointment: "Appointment",
 };
 
-export function ActivityComposer({ contactId }: { contactId: string }) {
+export function ActivityComposer({
+  contactId,
+  onSaved,
+}: {
+  contactId: string;
+  /**
+   * Called after a successful save, in addition to `router.refresh()`. The side
+   * sheet loads its profile client-side, so a server re-render alone would
+   * leave the newly logged activity invisible there until reopened.
+   */
+  onSaved?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<ActivityType>("note");
@@ -51,8 +62,9 @@ export function ActivityComposer({ contactId }: { contactId: string }) {
       setOpen(false);
       setType("note");
       router.refresh();
+      onSaved?.();
     }
-  }, [state, router]);
+  }, [state, router, onSaved]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

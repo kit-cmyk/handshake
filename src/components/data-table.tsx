@@ -326,8 +326,43 @@ export function DataTable<TData>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() ? "selected" : undefined}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  // A clickable row has to be reachable without a mouse: on the
+                  // contacts table the row is the only way into the detail
+                  // sheet, so click-only made deals, segments and campaigns
+                  // unreachable by keyboard entirely.
+                  //
+                  // Deliberately no `role="button"` — that would override the
+                  // implicit `row` role and break the grid semantics screen
+                  // readers rely on to announce column headers. A focusable row
+                  // that responds to Enter/Space keeps both.
+                  className={
+                    onRowClick
+                      ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      : undefined
+                  }
+                  tabIndex={onRowClick ? 0 : undefined}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          // Let the row's own controls (checkbox, row menu,
+                          // links) handle their keys instead of opening the row
+                          // behind them.
+                          if (
+                            e.target !== e.currentTarget &&
+                            (e.target as HTMLElement).closest(
+                              "button, a, input, select, textarea, [role='menuitem']",
+                            )
+                          ) {
+                            return;
+                          }
+                          // Space would otherwise scroll the page.
+                          e.preventDefault();
+                          onRowClick(row.original);
+                        }
+                      : undefined
+                  }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
