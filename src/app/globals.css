@@ -15,8 +15,6 @@
   --primary-foreground: oklch(1.00 0 0);
   --primary-gradient: linear-gradient(180deg, #3b5be0 0%, #2743c9 100%);
   --primary-gradient-hover: linear-gradient(180deg, #4667e8 0%, #2f4ed6 100%);
-  --shadow-cta: 0 4px 14px 0 rgba(29, 44, 120, 0.35);
-  --shadow-cta-hover: 0 6px 18px 0 rgba(29, 44, 120, 0.45);
   --secondary: oklch(0.9142 0.0208 274.02);
   --secondary-foreground: oklch(0.37 0.03 259.73);
   --muted: oklch(0.9443 0.0165 274.82);
@@ -63,8 +61,6 @@
   --primary-foreground: oklch(1.00 0 0);
   --primary-gradient: linear-gradient(180deg, #4667e8 0%, #2743c9 100%);
   --primary-gradient-hover: linear-gradient(180deg, #5273f0 0%, #2f4ed6 100%);
-  --shadow-cta: 0 4px 14px 0 rgba(0, 0, 0, 0.45);
-  --shadow-cta-hover: 0 6px 18px 0 rgba(0, 0, 0, 0.55);
   --secondary: oklch(0.35 0.04 262.16);
   --secondary-foreground: oklch(0.93 0.01 264.60);
   --muted: oklch(0.30 0.03 261.75);
@@ -101,9 +97,9 @@
 }
 
 @theme inline {
-  --font-sans: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -168,8 +164,8 @@
     }
   :root {
     --radius: 0.625rem;
-    --font-heading: "Google Sans", var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
-    --font-body: var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
+    --font-heading: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+    --font-body: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
     --font-mono: var(--font-ibm-plex-mono);
   }
 
@@ -240,9 +236,6 @@
       oklch(0.54 0.21 261),
       oklch(0.44 0.19 260)
     );
-    box-shadow:
-      0 1px 2px oklch(0.2 0.03 264 / 0.25),
-      inset 0 1px 0 oklch(1 0 0 / 0.15);
   }
   .btn-brand:hover:not(:disabled) {
     background-image: linear-gradient(
@@ -373,6 +366,17 @@
 .email-editor .ProseMirror a {
   color: #2563eb;
   text-decoration: underline;
+}
+
+/* `{{shortcode}}` chips inside the editor (decoration, not stored markup). */
+.email-editor .ProseMirror .merge-token {
+  border-radius: 0.25rem;
+  background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: var(--primary);
+  padding: 0 0.15rem;
+  font-weight: 500;
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 0.9em;
 }
 .email-editor .ProseMirror img {
   max-width: 100%;

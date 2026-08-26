@@ -6,6 +6,11 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  FieldError,
+  fieldErrorProps,
+  errorFor,
+} from "@/components/ui/field-error";
 import { SheetFooter } from "@/components/ui/sheet";
 import { saveCompany, type FormState } from "./actions";
 import type { Company } from "@/lib/types";
@@ -16,12 +21,15 @@ function Field({
   defaultValue,
   type = "text",
   placeholder,
+  error,
 }: {
   name: string;
   label: string;
   defaultValue?: string | number | null;
   type?: string;
   placeholder?: string;
+  /** Validation message for this field, rendered directly beneath it. */
+  error?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -32,7 +40,9 @@ function Field({
         type={type}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
+        {...fieldErrorProps(name, !!error)}
       />
+      <FieldError id={name}>{error}</FieldError>
     </div>
   );
 }
@@ -64,7 +74,9 @@ export function CompanyForm({
     <form action={formAction} className="space-y-4">
       {company && <input type="hidden" name="id" value={company.id} />}
 
-      <Field name="name" label="Name" defaultValue={company?.name} />
+      <Field name="name" label="Name" defaultValue={company?.name} 
+          error={errorFor(state, "name", "name")}
+        />
 
       <div className="grid grid-cols-2 gap-3">
         <Field
@@ -72,37 +84,53 @@ export function CompanyForm({
           label="Category (local)"
           defaultValue={company?.category}
           placeholder="e.g. Dentist"
+        
+          error={errorFor(state, "category", "name")}
         />
         <Field
           name="industry"
           label="Industry (B2B)"
           defaultValue={company?.industry}
           placeholder="e.g. SaaS"
+        
+          error={errorFor(state, "industry", "name")}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field name="website" label="Website" defaultValue={company?.website} />
+        <Field name="website" label="Website" defaultValue={company?.website} 
+          error={errorFor(state, "website", "name")}
+        />
         <Field
           name="domain"
           label="Domain"
           defaultValue={company?.domain}
           placeholder="acme.com"
+        
+          error={errorFor(state, "domain", "name")}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field name="phone" label="Phone" defaultValue={company?.phone} />
+        <Field name="phone" label="Phone" defaultValue={company?.phone} 
+          error={errorFor(state, "phone", "name")}
+        />
         <Field
           name="linkedin_url"
           label="LinkedIn"
           defaultValue={company?.linkedin_url}
+        
+          error={errorFor(state, "linkedin_url", "name")}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field name="city" label="City" defaultValue={company?.city} />
-        <Field name="region" label="Region/State" defaultValue={company?.region} />
+        <Field name="city" label="City" defaultValue={company?.city} 
+          error={errorFor(state, "city", "name")}
+        />
+        <Field name="region" label="Region/State" defaultValue={company?.region} 
+          error={errorFor(state, "region", "name")}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -111,16 +139,19 @@ export function CompanyForm({
           label="Employees"
           type="number"
           defaultValue={company?.employee_count}
+        
+          error={errorFor(state, "employee_count", "name")}
         />
         <Field
           name="annual_revenue"
           label="Annual revenue"
           defaultValue={company?.annual_revenue}
           placeholder="e.g. 5000000"
+        
+          error={errorFor(state, "annual_revenue", "name")}
         />
       </div>
 
-      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <SheetFooter>
         {onCancel && (

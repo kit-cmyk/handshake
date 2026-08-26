@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import {
   Card,
@@ -83,25 +85,18 @@ export default async function WorkflowReportPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/reports/workflows"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to reports
-      </Link>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{workflow.name}</h1>
-          <Badge variant="secondary">{workflow.status}</Badge>
-        </div>
-        <Link
-          href={`/workflows/${id}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Open workflow <ExternalLink className="size-4" />
-        </Link>
-      </div>
+      <PageHeader
+        back="reports"
+        title={workflow.name}
+        badge={<Badge variant="secondary">{workflow.status}</Badge>}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/workflows/${id}`}>
+              Open workflow <ExternalLink className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total runs" value={report.runs.total} />

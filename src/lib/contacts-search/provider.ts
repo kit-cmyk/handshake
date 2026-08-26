@@ -285,5 +285,8 @@ export function contactPayload(
     owner_id: ownerId,
     lifecycle_stage: "new" as const,
     source: "people_search",
+    // `source` is the machine tag; `lead_source` is the human-facing field the
+    // Contacts UI shows and the contact form edits.
+    lead_source: "Find leads",
   };
 }

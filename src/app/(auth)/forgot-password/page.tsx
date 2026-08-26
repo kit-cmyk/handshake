@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError, fieldErrorProps } from "@/components/ui/field-error";
 import {
   Card,
   CardContent,
@@ -37,12 +38,13 @@ export default function ForgotPasswordPage() {
               autoComplete="email"
               placeholder="you@company.com"
               required
+              {...fieldErrorProps("email", state.field === "email")}
             />
+            <FieldError id="email">
+              {state.field === "email" && state.error}
+            </FieldError>
           </div>
           <div aria-live="polite">
-            {state.error && (
-              <p className="text-sm text-destructive">{state.error}</p>
-            )}
             {state.message && (
               <p className="text-sm text-green-600">{state.message}</p>
             )}

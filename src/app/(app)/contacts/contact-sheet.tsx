@@ -24,7 +24,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
+import { Badge, CountBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
@@ -86,9 +86,7 @@ function Section({
       <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
         {count != null && count > 0 && (
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-            {count}
-          </span>
+          <CountBadge count={count} />
         )}
       </h3>
       {children}

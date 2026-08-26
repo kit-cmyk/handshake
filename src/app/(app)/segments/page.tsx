@@ -1,6 +1,8 @@
 import { Plus, ListFilter, Upload } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { SegmentSheet } from "./segment-sheet";
 import { SegmentImportSheet } from "./segment-import-sheet";
 import { EmptyState } from "@/components/empty-state";
@@ -53,30 +55,28 @@ export default async function SegmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Segments</h1>
-          <p className="text-sm text-muted-foreground">
-            Static lists and dynamic, auto-updating audiences.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <SegmentImportSheet
-            trigger={
-              <Button variant="outline">
-                <Upload className="size-4" /> Import CSV
-              </Button>
-            }
-          />
-          <SegmentSheet
-            trigger={
-              <Button>
-                <Plus className="size-4" /> New segment
-              </Button>
-            }
-          />
-        </div>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.segments.label}
+        description={DESTINATIONS.segments.description}
+        actions={
+          <>
+            <SegmentImportSheet
+              trigger={
+                <Button variant="outline">
+                  <Upload className="size-4" /> Import CSV
+                </Button>
+              }
+            />
+            <SegmentSheet
+              trigger={
+                <Button>
+                  <Plus className="size-4" /> New segment
+                </Button>
+              }
+            />
+          </>
+        }
+      />
 
       {rows.length ? (
         <SegmentsTable data={rows} />

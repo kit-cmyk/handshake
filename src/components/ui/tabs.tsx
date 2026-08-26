@@ -13,7 +13,10 @@ function TabsList({
   return (
     <TabsPrimitive.List
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+        // A full-width rail the triggers sit on, so the active underline reads
+        // as a break in the rule rather than a floating dash. Scrolls sideways
+        // rather than wrapping when a tab set outgrows a narrow viewport.
+        "flex w-full items-center gap-6 overflow-x-auto border-b border-border",
         className
       )}
       {...props}
@@ -28,7 +31,16 @@ function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm [&_svg]:size-4",
+        "relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap",
+        "px-1 pb-3 pt-2 text-sm font-medium text-muted-foreground transition-colors",
+        "hover:text-foreground",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "disabled:pointer-events-none disabled:opacity-50",
+        "data-[state=active]:text-foreground",
+        // The underline overlaps the list's 1px rail so the two read as one line.
+        "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity",
+        "data-[state=active]:after:opacity-100",
+        "[&_svg]:size-4 [&_svg]:shrink-0",
         className
       )}
       {...props}
@@ -42,7 +54,7 @@ function TabsContent({
 }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
-      className={cn("mt-4 focus-visible:outline-none", className)}
+      className={cn("mt-6 focus-visible:outline-none", className)}
       {...props}
     />
   );

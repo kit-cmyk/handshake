@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import { getEmailProvider } from "@/lib/email/provider";
 
-export type MailboxState = { ok?: boolean; error?: string };
+export type MailboxState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -21,7 +26,7 @@ export async function addMailbox(
     Number(String(fd.get("daily_limit") ?? "200")) || 200
   );
 
-  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
+  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address.", field: "email" };
 
   const { error } = await supabase.from("mailboxes").insert({
     org_id: org.id,

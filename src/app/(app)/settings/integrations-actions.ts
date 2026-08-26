@@ -10,7 +10,13 @@ import {
   type SlackEventKey,
 } from "@/lib/integrations/slack";
 
-export type SlackState = { ok?: boolean; error?: string; message?: string };
+export type SlackState = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const CAN_MANAGE = ["owner", "admin"];
 
@@ -31,7 +37,7 @@ export async function saveSlackIntegration(
     return { error: "Only workspace admins can change integrations." };
 
   const webhookUrl = String(fd.get("webhook_url") ?? "").trim();
-  if (!webhookUrl) return { error: "A Slack Incoming Webhook URL is required." };
+  if (!webhookUrl) return { error: "A Slack Incoming Webhook URL is required.", field: "webhook_url" };
   if (!isValidSlackWebhookUrl(webhookUrl))
     return {
       error:
@@ -40,7 +46,7 @@ export async function saveSlackIntegration(
 
   const events = parseEvents(fd);
   if (events.length === 0)
-    return { error: "Choose at least one event to be notified about." };
+    return { error: "Choose at least one event to be notified about.", field: "events" };
 
   const enabled = fd.get("enabled") !== "false";
   const config: SlackConfig = { webhook_url: webhookUrl, events };
@@ -69,7 +75,7 @@ export async function testSlackIntegration(): Promise<SlackState> {
     .maybeSingle();
 
   const url = (data?.config as Partial<SlackConfig> | null)?.webhook_url;
-  if (!url) return { error: "Connect Slack first, then send a test." };
+  if (!url) return { error: "Connect Slack first, then send a test.", field: "webhook_url" };
 
   const res = await postToSlack(
     url,

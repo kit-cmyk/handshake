@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Users, Building2, Handshake, SearchX } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { contactName } from "@/lib/types";
 
 type SearchResult = {
@@ -107,14 +109,16 @@ export default async function SearchPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Search</h1>
-        {raw && (
-          <p className="text-sm text-muted-foreground">
-            {total} result{total === 1 ? "" : "s"} for &ldquo;{raw}&rdquo;
-          </p>
-        )}
-      </div>
+      <PageHeader
+        title={DESTINATIONS.search.label}
+        description={
+          raw ? (
+            <>
+              {total} result{total === 1 ? "" : "s"} for &ldquo;{raw}&rdquo;
+            </>
+          ) : null
+        }
+      />
 
       {!raw ? (
         <EmptyState

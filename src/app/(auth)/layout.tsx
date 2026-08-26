@@ -11,7 +11,7 @@ export default function AuthLayout({
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left — form column */}
       <div className="flex flex-col px-6 py-8 sm:px-12 lg:px-16">
-        <Link href="/login" className="flex w-fit items-center gap-2.5">
+        <Link href="/" className="flex w-fit items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
             <Handshake className="size-5" />
           </span>

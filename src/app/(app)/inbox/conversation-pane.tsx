@@ -17,9 +17,12 @@ import {
   UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { eventLabel } from "@/lib/inbox/timeline";
 import { stripHtml } from "@/lib/inbox/inbound";
 import type { ActivityType, TimelineEntry } from "@/lib/types";
+import type { EmailSnippet } from "@/components/rich-email-editor";
+import { formatAddressList } from "@/lib/email/recipients";
 import { UserAvatar } from "@/components/user-avatar";
 import type { ConvRow, PersonMap } from "./conversation-list";
 import { Composer } from "./composer";
@@ -37,6 +40,17 @@ const ACTIVITY_ICON: Record<ActivityType, typeof StickyNote> = {
   appointment: CalendarClock,
 };
 
+/** Cc from the most recent message that had one, newest first. */
+function latestCopies(timeline: TimelineEntry[]): string[] {
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    const entry = timeline[i];
+    if (entry.kind !== "message") continue;
+    const cc = entry.message.cc_addresses;
+    if (cc?.length) return cc;
+  }
+  return [];
+}
+
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString();
@@ -47,11 +61,13 @@ export function ConversationPane({
   timeline,
   people,
   currentUserId,
+  templates = [],
 }: {
   conversation: ConvRow | null;
   timeline: TimelineEntry[];
   people: PersonMap;
   currentUserId: string;
+  templates?: EmailSnippet[];
 }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
@@ -84,6 +100,10 @@ export function ConversationPane({
   const assignedToMe = conversation.assigneeId === currentUserId;
   const closed = conversation.status === "closed";
 
+  // Whoever the newest message copied is still on the thread — the reply
+  // pre-fills with them so a copied colleague doesn't silently drop off.
+  const latestCc = latestCopies(timeline);
+
   return (
     <div className="flex min-h-0 flex-col">
       {/* Header */}
@@ -98,17 +118,15 @@ export function ConversationPane({
                 · {conversation.companyName}
               </span>
             )}
-            {closed && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                Closed
-              </span>
-            )}
+            {closed && <Badge variant="secondary">Closed</Badge>}
           </div>
-          {conversation.contactEmail && (
-            <p className="truncate text-xs text-muted-foreground">
-              {conversation.contactEmail}
-            </p>
-          )}
+          <p className="truncate text-xs text-muted-foreground">
+            {conversation.subject && (
+              <span className="text-foreground">{conversation.subject}</span>
+            )}
+            {conversation.subject && conversation.contactEmail && " · "}
+            {conversation.contactEmail}
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -170,6 +188,9 @@ export function ConversationPane({
         conversationId={conversation.id}
         contactId={conversation.contactId}
         contactEmail={conversation.contactEmail}
+        threadSubject={conversation.subject}
+        threadCc={latestCc}
+        templates={templates}
         onDone={() => router.refresh()}
       />
     </div>
@@ -234,6 +255,17 @@ function TimelineRow({
         {m.subject && (
           <p className="mb-0.5 text-xs font-medium text-muted-foreground">
             {m.subject}
+          </p>
+        )}
+        {(m.cc_addresses?.length || m.bcc_addresses?.length) && (
+          <p className="mb-0.5 text-xs text-muted-foreground">
+            {m.cc_addresses?.length ? (
+              <>Cc: {formatAddressList(m.cc_addresses)}</>
+            ) : null}
+            {m.cc_addresses?.length && m.bcc_addresses?.length ? " · " : null}
+            {m.bcc_addresses?.length ? (
+              <>Bcc: {formatAddressList(m.bcc_addresses)}</>
+            ) : null}
           </p>
         )}
         <div

@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = {
   error?: string;
+  /** Which input the error belongs under, so the form can render it there. */
+  field?: string;
   message?: string;
   needsConfirmation?: boolean;
   email?: string;
@@ -27,18 +29,29 @@ async function siteUrl(): Promise<string> {
   return host ? `${proto}://${host}` : "http://localhost:3000";
 }
 
-/** Turn raw Supabase auth errors into friendly, non-enumerating copy. */
-function friendly(message: string): string {
+/**
+ * Turn raw Supabase auth errors into friendly, non-enumerating copy, and say
+ * which input the message belongs under. Errors that aren't about one field in
+ * particular (a network failure, an unrecognised Supabase message) fall back to
+ * `email` — the first field in every auth form, so nothing renders orphaned.
+ */
+function friendly(message: string): { error: string; field: string } {
   const m = message.toLowerCase();
   if (m.includes("invalid login credentials"))
-    return "Incorrect email or password.";
+    return { error: "Incorrect email or password.", field: "password" };
   if (m.includes("email not confirmed"))
-    return "Please confirm your email first — check your inbox, or resend below.";
+    return {
+      error: "Please confirm your email first — check your inbox, or resend below.",
+      field: "email",
+    };
   if (m.includes("user already registered"))
-    return "An account with this email already exists. Try signing in.";
+    return {
+      error: "An account with this email already exists. Try signing in.",
+      field: "email",
+    };
   if (m.includes("password should be"))
-    return "Password must be at least 6 characters.";
-  return message;
+    return { error: "Password must be at least 6 characters.", field: "password" };
+  return { error: message, field: "email" };
 }
 
 function safeNext(next: FormDataEntryValue | null): string {
@@ -64,7 +77,7 @@ export async function login(
     if (error.message.toLowerCase().includes("email not confirmed")) {
       redirect(`/verify-email?email=${encodeURIComponent(email)}`);
     }
-    return { error: friendly(error.message), email };
+    return { ...friendly(error.message), email };
   }
 
   revalidatePath("/", "layout");
@@ -81,7 +94,7 @@ export async function signup(
   const next = safeNext(formData.get("next"));
 
   if (password.length < 6)
-    return { error: "Password must be at least 6 characters.", email };
+    return { error: "Password must be at least 6 characters.", field: "password", email };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -93,7 +106,7 @@ export async function signup(
     },
   });
 
-  if (error) return { error: friendly(error.message), email };
+  if (error) return { ...friendly(error.message), email };
 
   if (data.session) {
     revalidatePath("/", "layout");
@@ -109,7 +122,7 @@ export async function resendConfirmation(
   formData: FormData
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
-  if (!email) return { error: "Enter your email first." };
+  if (!email) return { error: "Enter your email first.", field: "email" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resend({
@@ -117,7 +130,7 @@ export async function resendConfirmation(
     email,
     options: { emailRedirectTo: `${await siteUrl()}/auth/callback` },
   });
-  if (error) return { error: friendly(error.message), email, needsConfirmation: true };
+  if (error) return { ...friendly(error.message), email, needsConfirmation: true };
   return { message: "Confirmation email sent.", email, needsConfirmation: true };
 }
 
@@ -126,7 +139,7 @@ export async function requestPasswordReset(
   formData: FormData
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
-  if (!email) return { error: "Enter your email." };
+  if (!email) return { error: "Enter your email.", field: "email" };
 
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(email, {
@@ -145,17 +158,17 @@ export async function updatePassword(
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
   if (password.length < 6)
-    return { error: "Password must be at least 6 characters." };
-  if (password !== confirm) return { error: "Passwords do not match." };
+    return { error: "Password must be at least 6 characters.", field: "password" };
+  if (password !== confirm) return { error: "Passwords do not match.", field: "confirm" };
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Your reset link has expired. Request a new one." };
+  if (!user) return { error: "Your reset link has expired. Request a new one.", field: "password" };
 
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: friendly(error.message) };
+  if (error) return { ...friendly(error.message) };
 
   revalidatePath("/", "layout");
   redirect("/dashboard");

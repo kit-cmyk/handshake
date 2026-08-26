@@ -6,6 +6,7 @@ import { tokenFromReplyAddress, verifyReplyToken } from "@/lib/email/tracking";
 import { shouldStopOnReply } from "@/lib/campaigns/reply";
 import { notifyReplyReceived } from "@/lib/integrations/notify";
 import { buildInboundMessage } from "@/lib/inbox/inbound";
+import { parseReferences } from "@/lib/inbox/threading";
 import { inngest } from "@/lib/inngest/client";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
@@ -16,7 +17,8 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 // the durable engine halts the sequence before its next send.
 //
 // When the provider forwards the parsed body (from/subject/text/html), we also
-// capture the message into the inbox: upsert the contact's email conversation
+// capture the message into the inbox: resolve the thread — by the reply's
+// In-Reply-To / References chain when present, else the contact's email thread —
 // and insert an inbound message. This works both for token-routed campaign
 // replies and for "cold" inbound matched by sender email → contact.
 
@@ -27,7 +29,10 @@ type InboundBody = {
   subject?: string;
   text?: string;
   html?: string;
+  cc?: string; // raw Cc header, e.g. "Ada <ada@x.com>, bob@y.com"
   message_id?: string;
+  in_reply_to?: string; // the Message-ID this reply answers
+  references?: string; // the full References chain, oldest first
 };
 
 /** Extract the bare email address from a "Name <email>" header value. */
@@ -43,6 +48,34 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
+/**
+ * Resolve which thread a reply belongs to from its In-Reply-To / References
+ * chain: any id in the chain that we sent identifies the thread exactly, even
+ * if the contact has since been merged or the reply came from an alias. Returns
+ * null when the headers are missing or unknown, and the caller falls back to
+ * the contact's own thread.
+ */
+async function threadFromHeaders(
+  admin: SupabaseClient,
+  orgId: string,
+  body: InboundBody,
+): Promise<string | null> {
+  const chain = [
+    ...parseReferences(body.in_reply_to),
+    ...parseReferences(body.references),
+  ];
+  if (!chain.length) return null;
+  const { data } = await admin
+    .from("messages")
+    .select("conversation_id")
+    .eq("org_id", orgId)
+    .in("message_id", chain)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as { conversation_id: string } | null)?.conversation_id ?? null;
+}
+
 /** Capture the parsed email into the inbox (best-effort; never throws). */
 async function captureMessage(
   admin: SupabaseClient,
@@ -53,27 +86,44 @@ async function captureMessage(
   const hasContent = !!(body.from || body.subject || body.text || body.html);
   if (!hasContent) return;
 
-  const { data: contact } = await admin
-    .from("contacts")
-    .select("company_id")
-    .eq("id", ctx.contactId)
-    .maybeSingle();
+  // Prefer the thread the reply's headers point at; otherwise the contact's own
+  // email thread, created on first contact. Either way the thread's subject is
+  // its identity — an inbound "Re: …" never renames it.
+  let conversationId = await threadFromHeaders(admin, ctx.orgId, body);
+  if (!conversationId) {
+    const { data: existing } = await admin
+      .from("conversations")
+      .select("id")
+      .eq("org_id", ctx.orgId)
+      .eq("contact_id", ctx.contactId)
+      .eq("channel", "email")
+      .maybeSingle();
 
-  const { data: conv } = await admin
-    .from("conversations")
-    .upsert(
-      {
-        org_id: ctx.orgId,
-        contact_id: ctx.contactId,
-        company_id: (contact as { company_id: string | null } | null)?.company_id ?? null,
-        channel: "email",
-        subject: body.subject ?? null,
-      },
-      { onConflict: "org_id,contact_id,channel" },
-    )
-    .select("id")
-    .maybeSingle();
-  if (!conv) return;
+    if (existing) {
+      conversationId = (existing as { id: string }).id;
+    } else {
+      const { data: contact } = await admin
+        .from("contacts")
+        .select("company_id")
+        .eq("id", ctx.contactId)
+        .maybeSingle();
+
+      const { data: conv } = await admin
+        .from("conversations")
+        .insert({
+          org_id: ctx.orgId,
+          contact_id: ctx.contactId,
+          company_id:
+            (contact as { company_id: string | null } | null)?.company_id ?? null,
+          channel: "email",
+          subject: body.subject ?? null,
+        })
+        .select("id")
+        .maybeSingle();
+      if (!conv) return;
+      conversationId = (conv as { id: string }).id;
+    }
+  }
 
   const message = buildInboundMessage(
     {
@@ -82,13 +132,15 @@ async function captureMessage(
       subject: body.subject,
       text: body.text,
       html: body.html,
+      cc: body.cc,
       messageId: body.message_id,
+      inReplyTo: body.in_reply_to,
     },
     { orgId: ctx.orgId, contactId: ctx.contactId, campaignId: ctx.campaignId },
   );
   await admin
     .from("messages")
-    .insert({ ...message, conversation_id: (conv as { id: string }).id });
+    .insert({ ...message, conversation_id: conversationId });
 }
 
 export async function POST(request: Request) {

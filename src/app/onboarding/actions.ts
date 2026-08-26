@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export type OnboardingState = { error?: string };
+export type OnboardingState = {
+  error?: string;
+  /** Which input the error belongs under, so the form can render it there. */
+  field?: string;
+};
 
 export async function createOrg(
   _prev: OnboardingState,
@@ -12,7 +16,7 @@ export async function createOrg(
 ): Promise<OnboardingState> {
   const name = String(formData.get("name") ?? "").trim();
   const fullName = String(formData.get("full_name") ?? "").trim();
-  if (!name) return { error: "Workspace name is required." };
+  if (!name) return { error: "Workspace name is required.", field: "name" };
 
   const supabase = await createClient();
   const {

@@ -1,5 +1,7 @@
 import { requireContext } from "@/lib/context";
 import { loadTemplates } from "@/lib/templates/queries";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { TemplatesBrowser } from "./templates-browser";
 
 export default async function TemplatesPage() {
@@ -8,13 +10,10 @@ export default async function TemplatesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Templates</h1>
-        <p className="text-sm text-muted-foreground">
-          Reusable starting points for emails, campaigns, and workflows. Pick a
-          curated template or one your team saved.
-        </p>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.templates.label}
+        description={DESTINATIONS.templates.description}
+      />
       <TemplatesBrowser templates={templates} />
     </div>
   );

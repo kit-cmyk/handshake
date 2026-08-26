@@ -1,3 +1,5 @@
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { SettingsNav } from "./settings-nav";
 
 export default function SettingsLayout({
@@ -7,12 +9,10 @@ export default function SettingsLayout({
 }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your account, workspace, team, and integrations.
-        </p>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.settings.label}
+        description="Manage your account, workspace, team, and integrations."
+      />
 
       <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-6 lg:self-start">

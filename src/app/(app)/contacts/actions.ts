@@ -10,7 +10,12 @@ import {
   type LifecycleStage,
 } from "@/lib/types";
 
-export type FormState = { ok?: boolean; error?: string };
+export type FormState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 /** Everything the contact side sheet renders, in one round-trip. */
 export type ContactProfile = {
@@ -158,7 +163,7 @@ export async function saveContact(
   };
 
   if (!payload.first_name && !payload.last_name && !payload.email) {
-    return { error: "Enter at least a name or an email." };
+    return { error: "Enter at least a name or an email.", field: "first_name" };
   }
 
   // A linked company must belong to this org. RLS hides foreign rows on read but
@@ -170,7 +175,7 @@ export async function saveContact(
       .select("id")
       .eq("id", payload.company_id)
       .maybeSingle();
-    if (!company) return { error: "Invalid company." };
+    if (!company) return { error: "Invalid company.", field: "company_id" };
   }
 
   // Capture the prior stage so we can fire a stage-change event on transitions.
@@ -225,6 +230,11 @@ export async function bulkDeleteContacts(
 ): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
   if (!ids.length) return { ok: true, deleted: 0 };
   const { supabase } = await requireContext();
+  // Same guard as deleteContact: deleting a contact SET-NULLs its deals, and a
+  // deal linked ONLY to a contact in this batch would then violate
+  // deals_contact_or_company_chk and abort the whole chunk. Drop those
+  // party-less deals first (company-linked deals survive with company only).
+  await supabase.from("deals").delete().in("contact_id", ids).is("company_id", null);
   const { error, count } = await supabase
     .from("contacts")
     .delete({ count: "exact" })
@@ -240,7 +250,8 @@ export async function updateLifecycle(
   const { supabase, org } = await requireContext();
   // Server actions are public endpoints — the TS type isn't enforced at runtime,
   // so allowlist the stage explicitly rather than trusting the argument.
-  if (!LIFECYCLE_STAGES.includes(stage)) return { error: "Invalid lifecycle stage." };
+  if (!LIFECYCLE_STAGES.includes(stage))
+    return { error: "Invalid lifecycle stage.", field: "lifecycle_stage" };
   const { data: prev } = await supabase
     .from("contacts")
     .select("lifecycle_stage")

@@ -13,7 +13,8 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   so the structured address inputs, CSV import mapping, and displays have
   backing columns. Until applied, saving these fields will error.
 - [ ] **Apply migration `0018_company_geo.sql`** — adds `latitude`/`longitude`
-  to `companies` for map plotting and radius search on the Find leads page.
+  to `companies` for map plotting and radius search on the Find leads page
+  (`/leads`).
   Until applied, prospected businesses won't persist coordinates (the results
   map still works from the live search response).
 - [x] **Apply migration `0019_deal_detail.sql`** — `service`, `description`,
@@ -65,7 +66,8 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   demographic filter controls once a real source backs them.
 - [ ] **Persisted map view of companies** — `companies.latitude/longitude` are
   now captured on prospect import; a saved-companies map (filter by radius over
-  existing CRM data, not just the last search) could reuse `ProspectMap`.
+  existing CRM data, not just the last search) could reuse `LeadMap`
+  (`src/app/(app)/leads/lead-map.tsx`).
 
 ## Deals / Calendar
 

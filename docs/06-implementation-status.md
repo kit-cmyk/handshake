@@ -233,7 +233,8 @@ Top-of-funnel acquisition by industry + location.
 - **runScrape** action — bounded synchronous batch (no Inngest needed): search →
   dedupe vs existing `google_place_id` → insert companies (`source=google_places`) →
   optional enrichment → record `scrape_jobs` row with counts.
-- **Find leads page** (`/prospect`) — search form (category, location, max, enrich
+- **Find leads page** (`/leads`, top-level sidebar feature; `/prospect` permanently
+  redirects) — search form (category, location, max, enrich
   toggle), results summary, recent-searches history, **and the reused
   DataHealthCallout** so issues on freshly acquired contacts surface immediately.
 - **Migration:** `supabase/migrations/0006_scrape_jobs.sql`

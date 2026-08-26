@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -204,28 +204,22 @@ export default async function CampaignDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/campaigns"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to campaigns
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{c.name}</h1>
-          <Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <CampaignStatusMenu
-            campaignId={c.id}
-            status={c.status}
-            hasSegment={!!c.segment_id}
-            audienceCount={audienceCount}
-          />
-          <CampaignActions campaignId={c.id} />
-        </div>
-      </div>
+      <PageHeader
+        back="campaigns"
+        title={c.name}
+        badge={<Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge>}
+        actions={
+          <>
+            <CampaignStatusMenu
+              campaignId={c.id}
+              status={c.status}
+              hasSegment={!!c.segment_id}
+              audienceCount={audienceCount}
+            />
+            <CampaignActions campaignId={c.id} />
+          </>
+        }
+      />
 
       {warnings.length > 0 && (
         <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">

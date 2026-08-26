@@ -11,7 +11,6 @@ import {
   Clock,
   Eye,
   Send,
-  ChevronDown,
   AlertCircle,
   CheckCircle2,
   GripVertical,
@@ -46,19 +45,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import {
-  renderTemplate,
-  SAMPLE_MERGE,
-  MERGE_TOKEN_GROUPS,
-} from "@/lib/email/template";
+import { renderTemplate, SAMPLE_MERGE } from "@/lib/email/template";
+import { MergeTokenMenu } from "@/components/merge-token-menu";
 import {
   LIFECYCLE_STAGES,
   LIFECYCLE_LABELS,
@@ -819,27 +807,10 @@ export function CampaignWizard({
                           onChange={(e) => updateStep(s.uid, { subject: e.target.value })}
                           className={invalid && !s.subject.trim() ? "border-destructive" : ""}
                         />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="outline" size="sm">
-                              Insert field <ChevronDown className="size-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {MERGE_TOKEN_GROUPS.map((g, gi) => (
-                              <React.Fragment key={g.group}>
-                                {gi > 0 && <DropdownMenuSeparator />}
-                                <DropdownMenuLabel>{g.group}</DropdownMenuLabel>
-                                {g.tokens.map((t) => (
-                                  <DropdownMenuItem key={t.token} onClick={() => insertToken(s.uid, t.token)}>
-                                    {t.label}
-                                    <span className="ml-1 text-muted-foreground">{`{{${t.token}}}`}</span>
-                                  </DropdownMenuItem>
-                                ))}
-                              </React.Fragment>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <MergeTokenMenu
+                          label="Insert field"
+                          onInsert={(token) => insertToken(s.uid, token)}
+                        />
                       </div>
                       <RichEmailEditor
                         value={s.body}
