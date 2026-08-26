@@ -3,9 +3,10 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type TabKey = "pipeline" | "campaigns" | "workflows" | "reports";
+type TabKey = "leads" | "pipeline" | "campaigns" | "workflows" | "reports";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "leads", label: "Find Leads" },
   { key: "pipeline", label: "Deal Pipeline" },
   { key: "campaigns", label: "Campaigns" },
   { key: "workflows", label: "Workflows" },
@@ -13,6 +14,10 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 const COPY: Record<TabKey, { title: string; body: string }> = {
+  leads: {
+    title: "Find your next customer, not just track them",
+    body: "Search real businesses by industry, location, and radius — or people by role and company. Review what comes back, then import the ones you want straight into your CRM, contact details and all.",
+  },
   pipeline: {
     title: "A pipeline that moves itself forward",
     body: "Drag deals across stages, see what is stuck, and let reminders nudge the next step. Every contact and conversation lives one click away.",
@@ -32,7 +37,7 @@ const COPY: Record<TabKey, { title: string; body: string }> = {
 };
 
 export function FeatureTabs() {
-  const [active, setActive] = React.useState<TabKey>("pipeline");
+  const [active, setActive] = React.useState<TabKey>("leads");
 
   return (
     <div>
@@ -81,6 +86,7 @@ export function FeatureTabs() {
 function Mockup({ tab }: { tab: TabKey }) {
   return (
     <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border bg-muted p-4">
+      {tab === "leads" && <LeadsMock />}
       {tab === "pipeline" && <PipelineMock />}
       {tab === "campaigns" && <CampaignsMock />}
       {tab === "workflows" && <WorkflowsMock />}
@@ -90,6 +96,74 @@ function Mockup({ tab }: { tab: TabKey }) {
 }
 
 const bar = "rounded-full bg-foreground/10";
+
+function LeadsMock() {
+  const rows = [
+    { rating: "4.8", tone: "bg-emerald-500" },
+    { rating: "4.5", tone: "bg-emerald-500" },
+    { rating: "4.1", tone: "bg-amber-500" },
+  ];
+  return (
+    <div className="flex h-full flex-col gap-3">
+      {/* Search bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-lg border bg-card px-3 py-2 shadow-sm">
+          <span className="size-2 rounded-full bg-primary" />
+          <div className={cn(bar, "h-1.5 w-1/3")} />
+          <div className="h-3 w-px bg-border" />
+          <div className={cn(bar, "h-1.5 w-1/4")} />
+        </div>
+        <div className="rounded-lg bg-primary px-4 py-2.5">
+          <div className="h-1.5 w-8 rounded-full bg-primary-foreground" />
+        </div>
+      </div>
+
+      <div className="grid flex-1 grid-cols-5 gap-3">
+        {/* Result list */}
+        <div className="col-span-3 flex flex-col gap-2">
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2.5 rounded-lg border bg-card p-2.5 shadow-sm"
+            >
+              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-primary text-[8px] font-bold text-primary-foreground">
+                ✓
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className={cn(bar, "h-1.5 w-3/4")} />
+                <div className={cn(bar, "mt-1.5 h-1.5 w-1/2")} />
+              </div>
+              <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                <span className={cn("size-1.5 rounded-full", r.tone)} />
+                {r.rating}
+              </span>
+            </div>
+          ))}
+          <div className="mt-auto rounded-lg bg-primary/10 px-2.5 py-2 text-[9px] font-semibold text-primary">
+            Import 3 selected →
+          </div>
+        </div>
+
+        {/* Map */}
+        <div className="relative col-span-2 overflow-hidden rounded-lg border bg-card shadow-sm">
+          <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [background-size:18px_18px]" />
+          <div className="absolute left-1/2 top-1/2 size-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/40 bg-primary/10" />
+          {[
+            { top: "32%", left: "38%" },
+            { top: "52%", left: "58%" },
+            { top: "64%", left: "34%" },
+          ].map((pin, i) => (
+            <span
+              key={i}
+              className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card"
+              style={pin}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PipelineMock() {
   const cols = [

@@ -18,7 +18,12 @@ import {
   type Stage,
 } from "@/lib/types";
 
-export type FormState = { ok?: boolean; error?: string };
+export type FormState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 export type DealContactOption = {
   id: string;
@@ -240,13 +245,13 @@ export async function saveDeal(
   const title = str(fd, "title");
   const pipeline_id = str(fd, "pipeline_id");
   const stage_id = str(fd, "stage_id");
-  if (!title) return { error: "Deal title is required." };
-  if (!pipeline_id || !stage_id) return { error: "Pipeline and stage are required." };
+  if (!title) return { error: "Deal title is required.", field: "title" };
+  if (!pipeline_id || !stage_id) return { error: "Pipeline and stage are required.", field: "pipeline_id" };
 
   const company_id = str(fd, "company_id");
   const contact_id = str(fd, "contact_id");
   if (!company_id && !contact_id) {
-    return { error: "Link the deal to a company or a contact." };
+    return { error: "Link the deal to a company or a contact.", field: "company_id" };
   }
 
   // Verify every linked record belongs to this org. RLS hides foreign rows from
@@ -257,10 +262,10 @@ export async function saveDeal(
     const { data } = await supabase.from(table).select("id").eq("id", fkId).maybeSingle();
     return !!data;
   };
-  if (!(await owns("pipelines", pipeline_id))) return { error: "Invalid pipeline." };
-  if (!(await owns("stages", stage_id))) return { error: "Invalid stage." };
-  if (!(await owns("companies", company_id))) return { error: "Invalid company." };
-  if (!(await owns("contacts", contact_id))) return { error: "Invalid contact." };
+  if (!(await owns("pipelines", pipeline_id))) return { error: "Invalid pipeline.", field: "pipeline_id" };
+  if (!(await owns("stages", stage_id))) return { error: "Invalid stage.", field: "stage_id" };
+  if (!(await owns("companies", company_id))) return { error: "Invalid company.", field: "company_id" };
+  if (!(await owns("contacts", contact_id))) return { error: "Invalid contact.", field: "contact_id" };
 
   const valueRaw = str(fd, "value");
   const value = valueRaw ? Number(valueRaw.replace(/[,$]/g, "")) : null;
@@ -363,7 +368,7 @@ export async function addDealNote(
 ): Promise<FormState> {
   const { supabase, org, userId } = await requireContext();
   const body = String(fd.get("body") ?? "").trim();
-  if (!body) return { error: "Write a note first." };
+  if (!body) return { error: "Write a note first.", field: "body" };
 
   const { data: deal } = await supabase
     .from("deals")

@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import type { Company, Contact } from "@/lib/types";
 
-export type FormState = { ok?: boolean; error?: string };
+export type FormState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 /** Everything the company side sheet renders, in one round-trip. */
 export type CompanyProfile = {
@@ -87,7 +92,7 @@ export async function saveCompany(
   const id = str(fd, "id");
 
   const name = str(fd, "name");
-  if (!name) return { error: "Company name is required." };
+  if (!name) return { error: "Company name is required.", field: "name" };
 
   const payload = {
     org_id: org.id,

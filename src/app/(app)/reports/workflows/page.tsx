@@ -1,5 +1,7 @@
 import { requireContext } from "@/lib/context";
 import { WorkflowReportTable } from "../reports-tables";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { ReportsNav } from "../reports-nav";
 import { pct } from "@/lib/funnel";
 import type { Workflow } from "@/lib/workflows";
@@ -39,12 +41,10 @@ export default async function WorkflowReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Automation completion rates across your workflows.
-        </p>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.reports.label}
+        description="Automation completion rates across your workflows."
+      />
 
       <ReportsNav />
 

@@ -9,7 +9,7 @@ import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import type { ScrapeJob } from "@/lib/types";
 
-export function ProspectHistoryTable({ data }: { data: ScrapeJob[] }) {
+export function SearchHistoryTable({ data }: { data: ScrapeJob[] }) {
   const columns = React.useMemo<ColumnDef<ScrapeJob>[]>(
     () => [
       {

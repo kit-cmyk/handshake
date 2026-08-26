@@ -9,8 +9,9 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { ArrowLeft, Pencil, Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { SegmentSheet } from "../segment-sheet";
 import { RefreshButton, DeleteSegmentButton } from "./segment-actions";
 import {
@@ -72,35 +73,31 @@ export default async function SegmentDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/segments"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to segments
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{seg.name}</h1>
+      <PageHeader
+        back="segments"
+        title={seg.name}
+        badge={
           <Badge variant={seg.type === "dynamic" ? "default" : "secondary"}>
             {seg.type}
           </Badge>
-        </div>
-        <div className="flex gap-2">
-          <SegmentSheet
-            segment={seg}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          {seg.type === "static" && def.rules.length > 0 && (
-            <RefreshButton id={seg.id} />
-          )}
-          <DeleteSegmentButton id={seg.id} />
-        </div>
-      </div>
+        }
+        actions={
+          <>
+            <SegmentSheet
+              segment={seg}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            {seg.type === "static" && def.rules.length > 0 && (
+              <RefreshButton id={seg.id} />
+            )}
+            <DeleteSegmentButton id={seg.id} />
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

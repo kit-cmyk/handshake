@@ -59,7 +59,8 @@ export function LandingNav({ authed }: { authed: boolean }) {
     <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:pt-6">
       <nav className="mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-full border bg-card/90 py-2 pl-5 pr-2 text-card-foreground shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/70">
         <Link
-          href="/"
+          href={authed ? "/dashboard" : "/"}
+          aria-label={authed ? "Handshake — go to dashboard" : "Handshake — home"}
           className="flex items-center gap-2 text-base font-extrabold tracking-tight"
         >
           <span className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground">

@@ -19,13 +19,22 @@ const shaderGradientEntry = path.join(
   "index.mjs",
 );
 
+// Turbopack's `resolveAlias` takes a module *specifier*, not a filesystem path:
+// a Windows absolute path (`C:\...`) fails with "windows imports are not
+// implemented yet". A deep specifier (`@shadergradient/react/dist/index.mjs`)
+// is no good either — the package's `exports` map declares only ".", so the
+// subpath is blocked. So hand Turbopack a root-relative POSIX path instead.
+const shaderGradientSpecifier =
+  "./" +
+  path.relative(import.meta.dirname, shaderGradientEntry).split(path.sep).join("/");
+
 const nextConfig: NextConfig = {
   // Pin the workspace root to this project so a lockfile in a parent directory
   // (e.g. a stray ~/package-lock.json) can't make Turbopack infer the wrong root.
   turbopack: {
     root: import.meta.dirname,
     resolveAlias: {
-      "@shadergradient/react": shaderGradientEntry,
+      "@shadergradient/react": shaderGradientSpecifier,
     },
   },
   webpack: (config) => {
@@ -35,6 +44,11 @@ const nextConfig: NextConfig = {
       "@shadergradient/react$": shaderGradientEntry,
     };
     return config;
+  },
+  // "Find leads" graduated from a sub-page of Contacts (/prospect) to a
+  // top-level feature at /leads. Keep old links working.
+  async redirects() {
+    return [{ source: "/prospect", destination: "/leads", permanent: true }];
   },
   experimental: {
     serverActions: {

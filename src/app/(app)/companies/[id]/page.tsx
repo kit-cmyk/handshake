@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Globe, Phone, MapPin, Users, Link2 } from "lucide-react";
+import { Pencil, Globe, Phone, MapPin, Users, Link2 } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,32 +53,24 @@ export default async function CompanyDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/companies"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to companies
-      </Link>
-
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{co.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {co.industry ?? co.category ?? "Company"}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <CompanyDialog
-            company={co}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          <DeleteCompanyButton id={co.id} />
-        </div>
-      </div>
+      <PageHeader
+        back="companies"
+        title={co.name}
+        description={co.industry ?? co.category ?? "Company"}
+        actions={
+          <>
+            <CompanyDialog
+              company={co}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            <DeleteCompanyButton id={co.id} />
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">

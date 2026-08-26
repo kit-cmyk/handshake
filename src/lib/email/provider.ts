@@ -5,10 +5,20 @@
 export type SendMessage = {
   from: string; // "Name <email@domain>"
   to: string;
+  /** Visible copies. Bare addresses; empty/omitted means none. */
+  cc?: string[];
+  /** Blind copies — never rendered into the delivered headers. */
+  bcc?: string[];
   subject: string;
   html: string;
   replyTo?: string;
-  /** Extra MIME headers, e.g. List-Unsubscribe / List-Unsubscribe-Post. */
+  /**
+   * Extra MIME headers, e.g. List-Unsubscribe / List-Unsubscribe-Post, or the
+   * Message-ID / In-Reply-To / References set built by
+   * `threadHeaderFields` in @/lib/inbox/threading — those make a reply land in
+   * the recipient's existing thread. Note Graph (Outlook) can only carry
+   * `x-`-prefixed custom headers and drops the rest; see OutlookProvider.
+   */
   headers?: Record<string, string>;
 };
 
@@ -23,7 +33,15 @@ class MockProvider implements EmailProvider {
   readonly name = "mock";
   async send(msg: SendMessage): Promise<SendResult> {
     // No real delivery in dev — record intent so the engine + funnel work E2E.
-    console.log(`[mock-email] → ${msg.to} · "${msg.subject}"`);
+    const copies = [
+      msg.cc?.length ? `cc ${msg.cc.join(", ")}` : "",
+      msg.bcc?.length ? `bcc ${msg.bcc.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    console.log(
+      `[mock-email] → ${msg.to}${copies ? ` (${copies})` : ""} · "${msg.subject}"`,
+    );
     return { id: `mock_${Math.round(performance.now())}_${msg.to}`, status: "sent" };
   }
 }
@@ -42,6 +60,8 @@ class ResendProvider implements EmailProvider {
         body: JSON.stringify({
           from: msg.from,
           to: msg.to,
+          cc: msg.cc?.length ? msg.cc : undefined,
+          bcc: msg.bcc?.length ? msg.bcc : undefined,
           subject: msg.subject,
           html: msg.html,
           reply_to: msg.replyTo,
@@ -86,6 +106,8 @@ export class GmailProvider implements EmailProvider {
         'Content-Type: text/html; charset="UTF-8"',
         "Content-Transfer-Encoding: base64",
       ];
+      if (msg.cc?.length) headers.push(`Cc: ${msg.cc.join(", ")}`);
+      if (msg.bcc?.length) headers.push(`Bcc: ${msg.bcc.join(", ")}`);
       if (msg.replyTo) headers.push(`Reply-To: ${msg.replyTo}`);
       for (const [k, v] of Object.entries(msg.headers ?? {})) headers.push(`${k}: ${v}`);
       // Body base64 in 76-char lines per MIME; header/body separated by a blank line.
@@ -124,8 +146,10 @@ export class OutlookProvider implements EmailProvider {
   async send(msg: SendMessage): Promise<SendResult> {
     try {
       // Graph only accepts custom internet headers whose name starts with "x-";
-      // anything else (e.g. List-Unsubscribe) is rejected, so we drop them here
-      // rather than fail the send.
+      // anything else (e.g. List-Unsubscribe, or the Message-ID / In-Reply-To /
+      // References threading set) is rejected, so we drop them here rather than
+      // fail the send. Outlook stamps its own Message-ID and threads sends from
+      // this mailbox by conversation; our stored ids still thread inbound.
       const internetMessageHeaders = Object.entries(msg.headers ?? {})
         .filter(([k]) => k.toLowerCase().startsWith("x-"))
         .map(([name, value]) => ({ name, value }));
@@ -135,6 +159,10 @@ export class OutlookProvider implements EmailProvider {
         body: { contentType: "HTML", content: msg.html },
         toRecipients: [{ emailAddress: { address: msg.to } }],
       };
+      if (msg.cc?.length)
+        message.ccRecipients = msg.cc.map((a) => ({ emailAddress: { address: a } }));
+      if (msg.bcc?.length)
+        message.bccRecipients = msg.bcc.map((a) => ({ emailAddress: { address: a } }));
       if (msg.replyTo) message.replyTo = [{ emailAddress: { address: msg.replyTo } }];
       if (internetMessageHeaders.length) message.internetMessageHeaders = internetMessageHeaders;
 

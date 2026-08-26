@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { CampaignWizard } from "../../campaign-wizard";
 import { loadCampaignContacts } from "../../contact-options";
@@ -92,16 +91,11 @@ export default async function EditCampaignPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/campaigns/${c.id}`}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to campaign
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Edit campaign</h1>
-        <p className="text-sm text-muted-foreground">{c.name}</p>
-      </div>
+      <PageHeader
+        back={{ href: `/campaigns/${c.id}`, label: "Back to campaign" }}
+        title="Edit campaign"
+        description={c.name}
+      />
       <CampaignWizard
         campaign={c}
         steps={(steps ?? []) as CampaignStep[]}

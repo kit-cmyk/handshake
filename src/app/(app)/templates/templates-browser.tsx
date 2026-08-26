@@ -99,7 +99,7 @@ export function TemplatesBrowser({ templates }: { templates: Template[] }) {
           const list = byKind(k);
           const Icon = KIND_ICON[k];
           return (
-            <TabsContent key={k} value={k} className="mt-4">
+            <TabsContent key={k} value={k}>
               {list.length ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {list.map((t) => (

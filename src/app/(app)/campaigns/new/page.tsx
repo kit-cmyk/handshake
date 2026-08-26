@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { NewCampaign } from "./new-campaign";
 import { loadCampaignContacts } from "../contact-options";
@@ -71,18 +70,11 @@ export default async function NewCampaignPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/campaigns"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to campaigns
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">New campaign</h1>
-        <p className="text-sm text-muted-foreground">
-          Five quick steps: details, audience, sequence, review, and schedule.
-        </p>
-      </div>
+      <PageHeader
+        back="campaigns"
+        title="New campaign"
+        description="Five quick steps: details, audience, sequence, review, and schedule."
+      />
       <NewCampaign
         templates={campaignTemplates}
         initialTemplate={initialTemplate}

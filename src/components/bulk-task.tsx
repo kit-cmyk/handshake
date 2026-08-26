@@ -213,7 +213,13 @@ export function BulkTaskProvider({ children }: { children: React.ReactNode }) {
 }
 
 function plural(noun: string, n: number) {
-  return n === 1 ? noun : `${noun}s`;
+  if (n === 1) return noun;
+  // "company" -> "companies", not "companys". A consonant before the -y turns
+  // it into -ies; a vowel before it keeps the plain -s ("day" -> "days").
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  // Sibilant endings take -es ("address" -> "addresses", "batch" -> "batches").
+  if (/(s|x|z|ch|sh)$/i.test(noun)) return `${noun}es`;
+  return `${noun}s`;
 }
 
 function BulkTaskOverlay() {

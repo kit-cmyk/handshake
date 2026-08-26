@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { WorkflowBuilder } from "../../workflow-builder";
 import { loadEmailSnippets } from "@/lib/templates/queries";
@@ -76,16 +75,11 @@ export default async function EditWorkflowPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/workflows/${w.id}`}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to workflow
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Edit workflow</h1>
-        <p className="text-sm text-muted-foreground">{w.name}</p>
-      </div>
+      <PageHeader
+        back={{ href: `/workflows/${w.id}`, label: "Back to workflow" }}
+        title="Edit workflow"
+        description={w.name}
+      />
       <WorkflowBuilder
         workflow={w}
         segments={segmentOptions}

@@ -2,37 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Inbox,
-  Users,
-  Building2,
-  Handshake,
-  KanbanSquare,
-  ListFilter,
-  Send,
-  Workflow,
-  LayoutTemplate,
-  BarChart3,
-  Settings,
-} from "lucide-react";
+import { Handshake } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrgSwitcher } from "@/components/org-switcher";
+import { DESTINATIONS, PRIMARY_NAV } from "@/lib/nav";
 import type { Org } from "@/lib/org";
-
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/inbox", label: "Inbox", icon: Inbox },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/companies", label: "Companies", icon: Building2 },
-  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
-  { href: "/segments", label: "Segments", icon: ListFilter },
-  { href: "/campaigns", label: "Campaigns", icon: Send },
-  { href: "/workflows", label: "Workflows", icon: Workflow },
-  { href: "/templates", label: "Templates", icon: LayoutTemplate },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
 
 export function Sidebar({
   orgs,
@@ -57,7 +31,8 @@ export function Sidebar({
         </span>
       </Link>
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {PRIMARY_NAV.map((key) => {
+          const { href, label, icon: Icon } = DESTINATIONS[key];
           const active =
             pathname === href || pathname.startsWith(href + "/");
           return (

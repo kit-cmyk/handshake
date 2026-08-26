@@ -6,7 +6,13 @@ import { requireContext } from "@/lib/context";
 import { getEmailProvider, defaultFrom } from "@/lib/email/provider";
 import { wrapEmail } from "@/lib/email/layout";
 
-export type TeamState = { ok?: boolean; error?: string; message?: string };
+export type TeamState = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const ROLES = ["admin", "member"];
 const CAN_MANAGE = ["owner", "admin"];
@@ -30,7 +36,7 @@ export async function createInvite(
     .toLowerCase();
   const roleRaw = String(fd.get("role") ?? "member");
   const role = ROLES.includes(roleRaw) ? roleRaw : "member";
-  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
+  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address.", field: "email" };
 
   // Already a member?
   const { data: existingProfiles } = await supabase
@@ -45,7 +51,7 @@ export async function createInvite(
       .eq("org_id", org.id)
       .in("user_id", ids)
       .maybeSingle();
-    if (mem) return { error: "That person is already on your team." };
+    if (mem) return { error: "That person is already on your team.", field: "email" };
   }
 
   const token = randomUUID();

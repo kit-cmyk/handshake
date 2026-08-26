@@ -29,6 +29,22 @@ describe("makeSnippet", () => {
 });
 
 describe("buildInboundMessage", () => {
+  it("captures the Cc header so a reply can carry it forward", () => {
+    const row = buildInboundMessage(
+      { from: "jane@acme.com", cc: "Bob <bob@acme.com>, sue@acme.com" },
+      { orgId: "o1", contactId: "c1" }
+    );
+    expect(row.cc_addresses).toEqual(["bob@acme.com", "sue@acme.com"]);
+  });
+
+  it("leaves cc_addresses null when the provider forwarded no Cc", () => {
+    const row = buildInboundMessage(
+      { from: "jane@acme.com" },
+      { orgId: "o1", contactId: "c1" }
+    );
+    expect(row.cc_addresses).toBeNull();
+  });
+
   it("builds an inbound message row from a parsed email + context", () => {
     const row = buildInboundMessage(
       {

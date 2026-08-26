@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   Pencil,
   Building2,
   Mail,
@@ -12,6 +10,7 @@ import {
   CalendarClock,
   CalendarPlus,
 } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,34 +91,26 @@ export default async function ContactDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/contacts"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to contacts
-      </Link>
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {contactName(c)}
-          </h1>
-          <LifecycleBadge stage={c.lifecycle_stage} />
-        </div>
-        <div className="flex gap-2">
-          <ContactDialog
-            companies={companyOptions}
-            contact={c}
-            leadSources={leadSources}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          <DeleteContactButton id={c.id} />
-        </div>
-      </div>
+      <PageHeader
+        back="contacts"
+        title={contactName(c)}
+        badge={<LifecycleBadge stage={c.lifecycle_stage} />}
+        actions={
+          <>
+            <ContactDialog
+              companies={companyOptions}
+              contact={c}
+              leadSources={leadSources}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            <DeleteContactButton id={c.id} />
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">

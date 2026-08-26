@@ -1,5 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Copy, Mail, Phone, User } from "lucide-react";
+import { CheckCircle2, Copy, Mail, Phone, User } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { NavButton } from "@/components/nav-button";
 import { requireContext } from "@/lib/context";
 import {
   Card,
@@ -144,19 +145,12 @@ export default async function ContactIssuesPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/contacts"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to contacts
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Data health</h1>
-        <p className="text-sm text-muted-foreground">
-          Resolve duplicate leads and fix formatting issues before you reach out.
-        </p>
-      </div>
+      <PageHeader
+        back="contacts"
+        title="Data health"
+        description="Resolve duplicate leads and fix formatting issues before you reach out."
+        actions={<NavButton to="leads" />}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (

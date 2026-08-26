@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "@/lib/types";
 
-export type PipelineState = { ok?: boolean; error?: string; message?: string };
+export type PipelineState = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const CAN_MANAGE = ["owner", "admin"];
 

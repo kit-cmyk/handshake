@@ -336,12 +336,20 @@ export type Message = {
   channel: "email";
   from_address: string | null;
   to_address: string | null;
+  /** Visible copies on this message. */
+  cc_addresses: string[] | null;
+  /** Blind copies — our record only; never shown to the recipients. */
+  bcc_addresses: string[] | null;
   subject: string | null;
   body_html: string | null;
   body_text: string | null;
   snippet: string | null;
   user_id: string | null;
   provider_message_id: string | null;
+  /** RFC 822 Message-ID, stored bare — the thread anchor for mail clients. */
+  message_id: string | null;
+  /** The Message-ID this one replies to, bare — null for a thread's first. */
+  in_reply_to: string | null;
   campaign_id: string | null;
   created_at: string;
 };

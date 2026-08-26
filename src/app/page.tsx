@@ -16,6 +16,7 @@ import { NoiseBackground } from "@/components/landing/noise-background";
 import TextAnimation from "@/components/ui/scroll-text";
 
 const CAPABILITIES = [
+  "Lead Finder",
   "Lead Management",
   "Email Campaigns",
   "Deal Pipeline",
@@ -88,7 +89,7 @@ export default async function Home() {
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href={user ? "/dashboard" : "/signup"}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               {user ? "Go to dashboard" : "Start free"}
               <ArrowUpRight className="size-4" strokeWidth={2.5} />
@@ -226,7 +227,7 @@ export default async function Home() {
               See Handshake in action
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-              One workspace, four ways to move revenue forward.
+              One workspace: find the leads, then work every one of them.
             </p>
           </div>
           <div className="mt-10">

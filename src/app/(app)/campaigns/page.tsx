@@ -3,6 +3,8 @@ import { Plus, Send } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { CampaignsTable, type CampaignRow } from "./campaigns-table";
 import type { Campaign } from "@/lib/types";
 
@@ -47,19 +49,17 @@ export default async function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Campaigns</h1>
-          <p className="text-sm text-muted-foreground">
-            Multi-step outreach sequences.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/campaigns/new">
-            <Plus className="size-4" /> New campaign
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.campaigns.label}
+        description={DESTINATIONS.campaigns.description}
+        actions={
+          <Button asChild>
+            <Link href="/campaigns/new">
+              <Plus className="size-4" /> New campaign
+            </Link>
+          </Button>
+        }
+      />
 
       {rows.length ? (
         <CampaignsTable data={rows} />

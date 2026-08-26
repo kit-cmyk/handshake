@@ -23,6 +23,8 @@ export type ConvRow = {
   contactEmail: string | null;
   companyId: string | null;
   companyName: string | null;
+  /** The thread's subject — set when it started, and what replies inherit. */
+  subject: string | null;
   status: ConversationStatus;
   assigneeId: string | null;
   lastMessageAt: string | null;
@@ -101,6 +103,8 @@ export function ConversationList({
   const hrefFor = (id: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("c", id);
+    // Opening a thread leaves any in-progress draft behind.
+    next.delete("compose");
     return `${pathname}?${next.toString()}`;
   };
 

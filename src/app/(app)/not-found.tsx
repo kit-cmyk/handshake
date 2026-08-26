@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { MapPinOff, LayoutDashboard } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { MapPinOff } from "lucide-react";
 import { StatusScreen } from "@/components/status-screen";
+import { NavButton } from "@/components/nav-button";
 
 export default function AppNotFound() {
   return (
@@ -11,15 +10,8 @@ export default function AppNotFound() {
       title="Nothing to see here"
       description="That record may have been deleted, or it never existed. Let's get you back to something real."
     >
-      <Link href="/dashboard" className={buttonVariants()}>
-        <LayoutDashboard className="size-4" /> Back to dashboard
-      </Link>
-      <Link
-        href="/contacts"
-        className={buttonVariants({ variant: "outline" })}
-      >
-        View contacts
-      </Link>
+      <NavButton to="dashboard" variant="default" label="Back to dashboard" />
+      <NavButton to="contacts" />
     </StatusScreen>
   );
 }
