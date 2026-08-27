@@ -31,6 +31,16 @@
   --border: oklch(0.8893 0.0169 259.42);
   --input: oklch(0.9002 0.013 266.69);
   --ring: oklch(0.48 0.20 260.48);
+  /* Flow-report (Sankey) tones. Four *meanings*, not five series: forward
+     motion, the goal, dropping out, and an outright failure. Every ribbon is
+     also labelled and legended, so nothing here carries meaning on colour
+     alone. Validated against the card surface for CVD separation and the
+     lightness/chroma bands — re-run the check if you re-tint them. */
+  --flow-move: #2a78d6;
+  --flow-goal: #1baf7a;
+  --flow-drop: #6c727e;
+  --flow-fail: #eb6834;
+
   --chart-1: oklch(0.48 0.20 260.48);
   --chart-2: oklch(0.56 0.24 260.95);
   --chart-3: oklch(0.40 0.16 259.09);
@@ -77,6 +87,12 @@
   --border: oklch(0.35 0.04 262.16);
   --input: oklch(0.35 0.04 262.16);
   --ring: oklch(0.56 0.24 260.95);
+  /* Re-stepped for the dark card surface, not an automatic flip. */
+  --flow-move: #3987e5;
+  --flow-goal: #199e70;
+  --flow-drop: #9ba2ae;
+  --flow-fail: #d95926;
+
   --chart-1: oklch(0.56 0.24 260.95);
   --chart-2: oklch(0.48 0.20 260.48);
   --chart-3: oklch(0.69 0.17 256.00);
@@ -253,15 +269,6 @@
 
 /* Playful empty-state / status-screen motion */
 @layer utilities {
-  @keyframes hs-float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-6px);
-    }
-  }
   @keyframes hs-wave {
     0%,
     60%,
@@ -278,17 +285,6 @@
       transform: rotate(-6deg);
     }
   }
-  @keyframes hs-ping {
-    0% {
-      transform: scale(1);
-      opacity: 0.45;
-    }
-    75%,
-    100% {
-      transform: scale(1.75);
-      opacity: 0;
-    }
-  }
   @keyframes hs-pop {
     0% {
       transform: scale(0.85);
@@ -299,39 +295,16 @@
       opacity: 1;
     }
   }
-  @keyframes hs-twinkle {
-    0%,
-    100% {
-      opacity: 0.3;
-      transform: scale(0.85);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.1);
-    }
-  }
-  .animate-hs-float {
-    animation: hs-float 3.6s ease-in-out infinite;
-  }
   .animate-hs-wave {
     animation: hs-wave 2.4s ease-in-out infinite;
     transform-origin: 75% 75%;
   }
-  .animate-hs-ping {
-    animation: hs-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
-  }
   .animate-hs-pop {
     animation: hs-pop 0.4s ease-out both;
   }
-  .animate-hs-twinkle {
-    animation: hs-twinkle 2s ease-in-out infinite;
-  }
   @media (prefers-reduced-motion: reduce) {
-    .animate-hs-float,
     .animate-hs-wave,
-    .animate-hs-ping,
-    .animate-hs-pop,
-    .animate-hs-twinkle {
+    .animate-hs-pop {
       animation: none;
     }
   }

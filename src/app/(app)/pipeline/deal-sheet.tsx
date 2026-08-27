@@ -26,21 +26,12 @@ import { DealDialog } from "./deal-dialog";
 import { DealQuickActions } from "./deal-quick-actions";
 import { DealTimeline } from "./deal-timeline";
 import { getDealProfile, deleteDeal, type DealProfile } from "./actions";
-import { statusLabel } from "@/lib/utils";
+import { money, statusLabel } from "@/lib/utils";
 import {
   contactName,
   DEAL_PRIORITY_LABELS,
   type DealPriority,
 } from "@/lib/types";
-
-function money(v: number | null): string {
-  if (v == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
-}
 
 const STATUS_VARIANT = {
   open: "default",
@@ -110,7 +101,10 @@ export function DealSheet({
   const d = profile?.deal;
 
   async function handleDelete() {
-    await deleteDeal(dealId);
+    // Returning the failure keeps the dialog open instead of closing over a
+    // deal that is still there.
+    const res = await deleteDeal(dealId);
+    if (res.error) return res;
     onOpenChange(false);
     router.refresh();
   }
@@ -170,7 +164,7 @@ export function DealSheet({
                   <SheetTitle>{d.title}</SheetTitle>
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="text-lg font-semibold">
-                      {money(d.value)}
+                      {money(d.value, "—")}
                     </span>
                     <Badge variant={STATUS_VARIANT[d.status]}>
                       {statusLabel(d.status)}

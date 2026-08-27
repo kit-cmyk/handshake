@@ -1,10 +1,10 @@
 import * as React from "react";
-import { Sparkles, type LucideIcon } from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 
 /**
- * A friendly, animated empty state.
+ * A friendly empty state.
  *
  * Wrap it in a dashed Card by default, or pass `bare` to drop the card
  * (e.g. inside a table cell or an existing Card).
@@ -56,15 +56,14 @@ export function EmptyState({
 function EmptyIllustration({ icon: Icon }: { icon: LucideIcon }) {
   return (
     <div className="relative grid size-20 shrink-0 place-items-center">
-      {/* radiating rings */}
-      <span className="absolute inset-0 rounded-full bg-primary/5 animate-hs-ping" />
+      {/* A static halo behind the badge. The outer ring that used to sit here
+          existed only to pulse — at 5% opacity it reads as nothing once it
+          stops moving, so it goes with the animation rather than staying on
+          as an invisible layer. */}
       <span className="absolute inset-2 rounded-full bg-primary/10" />
-      {/* the badge */}
-      <span className="animate-hs-float relative grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/25">
+      <span className="relative grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/25">
         <Icon className="size-7" strokeWidth={2} />
       </span>
-      {/* a little sparkle */}
-      <Sparkles className="animate-hs-twinkle absolute -right-1 -top-1 size-4 text-primary" />
     </div>
   );
 }

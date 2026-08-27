@@ -23,16 +23,7 @@ import { DeleteDealButton } from "./delete-deal-button";
 import { DealQuickActions } from "../deal-quick-actions";
 import { DealTimeline } from "../deal-timeline";
 import { contactName, DEAL_PRIORITY_LABELS, type DealPriority } from "@/lib/types";
-import { statusLabel } from "@/lib/utils";
-
-function money(v: number | null): string {
-  if (v == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
-}
+import { money, statusLabel } from "@/lib/utils";
 
 const STATUS_VARIANT = {
   open: "default",
@@ -100,7 +91,7 @@ export default async function DealDetailPage({
         description={
           <span className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-xl font-semibold text-foreground">
-              {money(d.value)}
+              {money(d.value, "—")}
             </span>
             <Badge variant={STATUS_VARIANT[d.status]}>
               {statusLabel(d.status)}
