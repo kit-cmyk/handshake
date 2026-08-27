@@ -6,8 +6,14 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FlowSankey } from "@/components/flow-sankey";
 import { FunnelStageBars } from "@/components/funnel-view";
-import { computeFunnel, pct } from "@/lib/funnel";
+import {
+  campaignFlow,
+  computeFunnel,
+  pct,
+  topReplyStep,
+} from "@/lib/funnel";
 
 type Funnel = ReturnType<typeof computeFunnel>;
 
@@ -23,10 +29,11 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 /**
- * The campaign funnel report — headline stats, delivery-issue badges, and the
- * per-step funnel breakdown. Presentational: callers compute the funnel (via
- * `computeFunnel`) and the enrolled count and pass them in, so this renders the
- * same way whether embedded in the campaign detail page or the reports page.
+ * The campaign funnel report — headline stats, delivery-issue badges, the
+ * sequence flow, and the per-step funnel breakdown. Presentational: callers
+ * compute the funnel (via `computeFunnel`) and the enrolled count and pass them
+ * in, so this renders the same way whether embedded in the campaign detail page
+ * or the reports page.
  */
 export function CampaignPerformance({
   funnel,
@@ -35,6 +42,9 @@ export function CampaignPerformance({
   funnel: Funnel;
   enrolled: number;
 }) {
+  const flow = campaignFlow(funnel, enrolled);
+  const best = topReplyStep(funnel);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -63,6 +73,33 @@ export function CampaignPerformance({
           )}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Where the sequence loses people</CardTitle>
+          <CardDescription>
+            Every enrolled contact follows one path: the emails they received,
+            and how their sequence ended. Ribbon width is contacts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {best && (
+            <p className="text-sm">
+              Most replies came from{" "}
+              <span className="font-medium">email {best.step}</span>
+              {best.subject ? (
+                <span className="text-muted-foreground"> · {best.subject}</span>
+              ) : null}{" "}
+              — {best.replied} {best.replied === 1 ? "reply" : "replies"} from{" "}
+              {best.rate}% of its sends.
+            </p>
+          )}
+          <FlowSankey
+            flow={flow}
+            empty="Nothing has been sent yet. Once this campaign starts sending, the flow shows where contacts stop."
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

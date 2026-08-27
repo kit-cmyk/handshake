@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   Card,
   CardContent,
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FlowSankey } from "@/components/flow-sankey";
 import { parseGraph } from "@/lib/workflows";
 import { statusLabel } from "@/lib/utils";
 import {
@@ -54,26 +56,35 @@ export default async function WorkflowReportPage({
     .single();
   if (!workflow) notFound();
 
-  const { data: runs } = await supabase
-    .from("workflow_runs")
-    .select("id, status")
-    .eq("workflow_id", id);
+  // This report needs the raw step rows, not counts: it averages time-in-step
+  // from entered_at/completed_at, and the flow chart follows each run's steps in
+  // the order they were entered. So page past PostgREST's 1000-row cap rather
+  // than aggregating — bounded by this one workflow's runs, not the whole org.
+  // Steps are filtered through an embedded inner join on their run's workflow;
+  // collecting run ids first and passing them to .in() put every id in the query
+  // string, which breaks on a workflow with many runs.
+  const [runs, steps] = await Promise.all([
+    fetchAllRows<RunLite>((from, to) =>
+      supabase
+        .from("workflow_runs")
+        .select("id, status")
+        .eq("workflow_id", id)
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllRows<RunStepLite>((from, to) =>
+      supabase
+        .from("workflow_run_steps")
+        .select(
+          "run_id, node_id, status, entered_at, completed_at, workflow_runs!inner(workflow_id)"
+        )
+        .eq("workflow_runs.workflow_id", id)
+        .order("id")
+        .range(from, to)
+    ),
+  ]);
 
-  const runIds = (runs ?? []).map((r) => (r as { id: string }).id);
-  let steps: RunStepLite[] = [];
-  if (runIds.length) {
-    const { data } = await supabase
-      .from("workflow_run_steps")
-      .select("node_id, status, entered_at, completed_at")
-      .in("run_id", runIds);
-    steps = (data ?? []) as RunStepLite[];
-  }
-
-  const report = computeWorkflowReport(
-    parseGraph(workflow.graph),
-    (runs ?? []) as RunLite[],
-    steps
-  );
+  const report = computeWorkflowReport(parseGraph(workflow.graph), runs, steps);
 
   // Bottleneck = reached node with the lowest completion rate.
   const reached = report.nodes.filter((n) => n.entered > 0);
@@ -116,6 +127,23 @@ export default async function WorkflowReportPage({
           it.
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How contacts move through</CardTitle>
+          <CardDescription>
+            Built from the routes runs actually took, not from how the canvas is
+            wired — so a branch shows the split it really produced. Ribbon width
+            is contacts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FlowSankey
+            flow={report.flow}
+            empty="No runs yet. Enroll contacts and the flow shows the paths they take."
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
