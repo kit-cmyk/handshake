@@ -13,6 +13,8 @@ import {
 import { defaultFrom } from "@/lib/email/provider";
 import {
   sendViaMailbox,
+  revalidateMailbox,
+  isRetryableSendFailure,
   MAILBOX_SENDER_COLUMNS,
   type MailboxSender,
 } from "@/lib/email/send";
@@ -418,7 +420,7 @@ export const campaignEngine = inngest.createFunction(
             .single();
           sender = data as MailboxSender | null;
         }
-        return sendViaMailbox(admin, sender, {
+        const sent = await sendViaMailbox(admin, sender, {
           from,
           to: email,
           subject,
@@ -426,6 +428,15 @@ export const campaignEngine = inngest.createFunction(
           replyTo: replyAddress(track, enrollmentId),
           headers: unsubHeaders(ctx.contact!.id, ctx.campaignId),
         });
+          // A retryable provider failure (rate limit, 5xx, network) must not
+          // fall through to `record`/`advance`: that logs a failure and moves on
+          // to the next step, so this contact silently never receives the email
+          // and no one finds out. Throwing hands the step back to Inngest, which
+          // re-runs the send with backoff. Permanent failures (400/403) still
+          // record and advance as before.
+        if (isRetryableSendFailure(sent))
+          throw new Error(`Retryable send failure: ${sent.error ?? "unknown"}`);
+        return sent;
       });
 
       await step.run(`record-${i}`, async () => {
@@ -995,7 +1006,16 @@ export const workflowRun = inngest.createFunction(
               .single();
             sender = data as MailboxSender | null;
           }
-          return sendViaMailbox(admin, sender, outcome.send);
+          const sent = await sendViaMailbox(admin, sender, outcome.send);
+          // A retryable provider failure (rate limit, 5xx, network) must not
+          // fall through to `record`/`advance`: that logs a failure and moves on
+          // to the next step, so this contact silently never receives the email
+          // and no one finds out. Throwing hands the step back to Inngest, which
+          // re-runs the send with backoff. Permanent failures (400/403) still
+          // record and advance as before.
+          if (isRetryableSendFailure(sent))
+            throw new Error(`Retryable send failure: ${sent.error ?? "unknown"}`);
+          return sent;
         });
         await step.run(`node-record-${node.id}`, async () => {
           await admin.from("events").insert({
@@ -1544,9 +1564,54 @@ export const workflowEmailClicked = inngest.createFunction(
 );
 
 /** All functions served by the /api/inngest endpoint. */
+
+/**
+ * Daily connected-mailbox health check.
+ *
+ * Access tokens are otherwise only refreshed in the course of a send, so a
+ * mailbox whose access was revoked (the user withdrew consent, changed their
+ * password, left the company) keeps showing a green "Connected" badge until a
+ * campaign happens to fail on it — by which point contacts have silently been
+ * skipped. Forcing a refresh once a day surfaces the Reconnect prompt while
+ * nothing is at stake.
+ *
+ * Note this is also the safety net for Google's unverified-app behavior: while
+ * the OAuth app is in "Testing", refresh tokens expire after 7 days, so every
+ * connected Gmail mailbox breaks weekly and the only visible symptom would
+ * otherwise be a campaign that stopped sending.
+ */
+export const mailboxHealthCheck = inngest.createFunction(
+  { id: "mailbox-health-check", triggers: [{ cron: "0 5 * * *" }] },
+  async ({ step }) => {
+    const admin = createAdminClient();
+
+    const { data: mailboxes } = await admin
+      .from("mailboxes")
+      .select(MAILBOX_SENDER_COLUMNS)
+      .not("oauth_email", "is", null);
+
+    const rows = (mailboxes ?? []) as MailboxSender[];
+    let healthy = 0;
+    let broken = 0;
+
+    for (const m of rows) {
+      // One step per mailbox: a provider timeout on one retries only that one,
+      // and already-checked mailboxes aren't re-refreshed on the retry.
+      const ok = await step.run(`check-${m.id}`, async () =>
+        revalidateMailbox(admin, m),
+      );
+      if (ok) healthy++;
+      else broken++;
+    }
+
+    return { checked: rows.length, healthy, broken };
+  },
+);
+
 export const functions = [
   helloWorld,
   reevaluateSegments,
+  mailboxHealthCheck,
   campaignEngine,
   campaignSegmentEntry,
   workflowRun,

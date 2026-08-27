@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { Plus, Trash2, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Mail, CheckCircle2, AlertTriangle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { addMailbox, deleteMailbox, type MailboxState } from "./actions";
+import {
+  addMailbox,
+  deleteMailbox,
+  sendMailboxTest,
+  type MailboxState,
+} from "./actions";
 import type { Mailbox } from "@/lib/types";
 import { statusLabel } from "@/lib/utils";
 
@@ -55,6 +60,30 @@ export function Mailboxes({
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  // Which row's test is in flight, and the last result — keyed by mailbox id so
+  // the message lands under the row it belongs to.
+  const [testing, setTesting] = React.useState<string | null>(null);
+  const [testResult, setTestResult] = React.useState<{
+    id: string;
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  async function runTest(id: string) {
+    setTesting(id);
+    setTestResult(null);
+    const res = await sendMailboxTest(id);
+    setTesting(null);
+    setTestResult({
+      id,
+      ok: !!res.ok,
+      text: res.ok
+        ? "Test sent — check your inbox."
+        : (res.error ?? "The test send failed."),
+    });
+    // A test clears connect_error on success, so refresh to drop the warning.
+    if (res.ok) router.refresh();
+  }
   const [state, formAction, pending] = useActionState<MailboxState, FormData>(
     addMailbox,
     {}
@@ -114,7 +143,29 @@ export function Mailboxes({
                       Reconnect needed — sending is paused for this mailbox.
                     </p>
                   )}
+                  {testResult?.id === m.id && (
+                    <p
+                      className={
+                        testResult.ok
+                          ? "mt-1 text-xs text-emerald-600 dark:text-emerald-400"
+                          : "mt-1 text-xs text-destructive"
+                      }
+                    >
+                      {testResult.text}
+                    </p>
+                  )}
                 </div>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={testing === m.id}
+                    onClick={() => runTest(m.id)}
+                  >
+                    <Send className="size-4" />
+                    {testing === m.id ? "Sending…" : "Send test"}
+                  </Button>
+                )}
                 {connected &&
                   canManage &&
                   (m.connect_error ? (
