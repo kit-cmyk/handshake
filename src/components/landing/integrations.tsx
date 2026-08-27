@@ -1,4 +1,4 @@
-import { ArrowRight, Handshake, CalendarDays, MessageSquare } from "lucide-react";
+import { ArrowRight, Handshake, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CRM_PROVIDERS } from "@/lib/crm/providers";
 import { MAILBOX_PROVIDERS } from "@/lib/email/mailbox-providers";
@@ -14,9 +14,10 @@ import { BrandGlyph } from "@/app/(app)/settings/brand-mark";
  * Node/fetch/secret code precisely so they can be imported anywhere; only
  * `label`, `type`, and `chip` are read, never the OAuth metadata.
  *
- * `BrandGlyph` renders a licensed logo where one exists in
- * `public/integrations/<type>.svg` and a brand-colored monogram otherwise —
- * vendor marks are trademarks and mostly cannot be shipped.
+ * `BrandGlyph` renders the vendor mark where one exists and a brand-colored
+ * monogram otherwise. On the dark migration panel the CRM marks sit on cream
+ * tiles rather than translucent chips: several vendor marks (Pipedrive's above
+ * all) are near-black and vanish against the ink.
  */
 
 /**
@@ -52,8 +53,8 @@ const TOOLS: {
     type: "slack",
     label: "Slack",
     description: "Get pinged when a lead replies, a deal is won, or a campaign wraps.",
-    chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
-    icon: MessageSquare,
+    // Chip and mark both match the Slack card in Settings → Integrations.
+    chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   },
 ];
 
@@ -62,17 +63,26 @@ function Glyph({
   label,
   chip,
   icon: Icon,
+  tone = "chip",
 }: {
   type: string;
   label: string;
   chip: string;
   icon?: typeof CalendarDays;
+  /**
+   * "chip" tints the tile with the integration's brand color — right on the
+   * light cards. "tile" is a flat cream square for the dark panel, where a
+   * tinted-on-ink chip would swallow the darker vendor marks.
+   */
+  tone?: "chip" | "tile";
 }) {
   return (
     <span
       className={cn(
         "grid size-9 shrink-0 place-items-center rounded-xl",
-        chip,
+        tone === "tile"
+          ? "bg-landing-cream text-landing-ink dark:text-landing-ink"
+          : chip,
       )}
     >
       {Icon ? (
@@ -111,7 +121,12 @@ export function Integrations() {
                   key={p.type}
                   className="flex items-center gap-2.5 rounded-xl border border-landing-cream/12 bg-landing-cream/[0.06] px-3 py-2.5"
                 >
-                  <Glyph type={p.type} label={p.label} chip={p.chip} />
+                  <Glyph
+                    type={p.type}
+                    label={p.label}
+                    chip={p.chip}
+                    tone="tile"
+                  />
                   <span className="min-w-0 truncate text-xs font-medium text-landing-cream/80">
                     {p.label}
                   </span>
