@@ -36,7 +36,12 @@ export default async function EditWorkflowPage({
     { data: otherWorkflows },
     { data: mailboxes },
   ] = await Promise.all([
-    supabase.from("segments").select("id, name").eq("org_id", org.id).order("name"),
+    supabase
+      .from("segments")
+      .select("id, name, type")
+      .eq("org_id", org.id)
+      .eq("managed", false)
+      .order("name"),
     supabase
       .from("campaigns")
       .select("id, name")
@@ -57,9 +62,9 @@ export default async function EditWorkflowPage({
       .eq("status", "active"),
   ]);
 
-  const segmentOptions = ((segments ?? []) as Pick<Segment, "id" | "name">[]).map(
-    (s) => ({ id: s.id, name: s.name })
-  );
+  const segmentOptions = (
+    (segments ?? []) as Pick<Segment, "id" | "name" | "type">[]
+  ).map((s) => ({ id: s.id, name: s.name, type: s.type }));
   const campaignOptions = ((campaigns ?? []) as { id: string; name: string }[]).map(
     (c) => ({ id: c.id, name: c.name })
   );

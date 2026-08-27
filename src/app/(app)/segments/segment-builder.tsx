@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { Plus, X, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Loader2, Plus, X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,25 +27,40 @@ import {
   saveSegment,
   previewSegment,
   type SegmentState,
-  type PreviewContact,
+  type SegmentPreview,
 } from "./actions";
+import { SegmentRuleFields } from "@/components/segment-rule-editor";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import type { LifecycleStage } from "@/lib/types";
-import { statusLabel } from "@/lib/utils";
 import {
-  SEGMENT_FIELDS,
-  OPERATORS_FOR_KIND,
-  OPERATOR_LABELS,
   VALUELESS_OPS,
-  fieldDef,
-  type Operator,
+  MULTI_VALUE_OPS,
+  definitionErrors,
   type Rule,
   type SegmentDefinition,
   type SegmentType,
   type Segment,
 } from "@/lib/segments";
 
-export function SegmentBuilder({ segment }: { segment?: Segment }) {
+/** Strip the fields an operator doesn't use, so the saved JSON stays clean. */
+function normalizeRule(r: Rule): Rule {
+  if (VALUELESS_OPS.includes(r.op)) return { field: r.field, op: r.op };
+  if (MULTI_VALUE_OPS.includes(r.op))
+    return { field: r.field, op: r.op, values: r.values ?? [] };
+  return { field: r.field, op: r.op, value: r.value ?? "" };
+}
+
+export function SegmentBuilder({
+  segment,
+  /** Explicit member count for a static segment, so the wipe warning is specific. */
+  memberCount,
+  onSaved,
+}: {
+  segment?: Segment;
+  memberCount?: number;
+  onSaved?: (id: string) => void;
+}) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState<SegmentState, FormData>(
     saveSegment,
     {}
@@ -57,33 +73,61 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
   const [rules, setRules] = React.useState<Rule[]>(
     segment?.definition?.rules ?? []
   );
+  // Validation messages stay hidden until the first save attempt, so a
+  // half-typed rule isn't shouting at you while you build it.
+  const [submitted, setSubmitted] = React.useState(false);
 
   const definition: SegmentDefinition = React.useMemo(
-    () => ({
-      match,
-      rules: rules.map((r) =>
-        VALUELESS_OPS.includes(r.op) ? { field: r.field, op: r.op } : r
-      ),
-    }),
+    () => ({ match, rules: rules.map(normalizeRule) }),
     [match, rules]
   );
 
+  const ruleProblems = React.useMemo(
+    () => definitionErrors(definition),
+    [definition]
+  );
+  const hasProblems = ruleProblems.some((e) => e.length > 0);
+
+  // Editing a filterless static list (a CSV import, or a hand-built list) and
+  // adding a rule replaces its membership with whatever the rule matches. The
+  // save action can't tell that apart from any other edit, so warn here.
+  const startedAsExplicitList =
+    !!segment &&
+    segment.type === "static" &&
+    (segment.definition?.rules ?? []).length === 0;
+  const willReplaceList = startedAsExplicitList && rules.length > 0;
+
   // Debounced live preview (count + a sample of matching contacts).
-  const [preview, setPreview] = React.useState<{
-    count: number;
-    total: number;
-    sample: PreviewContact[];
-  } | null>(null);
-  const [previewing, startPreview] = React.useTransition();
+  const [preview, setPreview] = React.useState<SegmentPreview | null>(null);
+  const [previewing, setPreviewing] = React.useState(false);
   const defJson = JSON.stringify(definition);
+  // Only the newest request may write state: the debounce narrows the window
+  // but a slow earlier call could still land last and show a stale count.
+  const requestSeq = React.useRef(0);
+
   React.useEffect(() => {
-    const t = setTimeout(() => {
-      startPreview(async () => {
-        setPreview(await previewSegment(defJson));
-      });
+    // An unfinished rule has nothing meaningful to preview — wait for it.
+    if (hasProblems) return;
+    const seq = ++requestSeq.current;
+    const t = setTimeout(async () => {
+      setPreviewing(true);
+      const result = await previewSegment(defJson);
+      // A superseded request must not write: it would show a count for a
+      // filter the user has already edited past.
+      if (seq !== requestSeq.current) return;
+      setPreview(result);
+      setPreviewing(false);
     }, 350);
     return () => clearTimeout(t);
-  }, [defJson]);
+  }, [defJson, hasProblems]);
+
+  // Save succeeded: hand control back to the sheet (close + navigate).
+  React.useEffect(() => {
+    if (state.ok && state.id) {
+      if (onSaved) onSaved(state.id);
+      else router.push(`/segments/${state.id}`);
+    }
+  }, [state.ok, state.id, onSaved, router]);
 
   function addRule() {
     setRules((rs) => [
@@ -97,13 +141,16 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
   function updateRule(i: number, patch: Partial<Rule>) {
     setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
-  function onFieldChange(i: number, field: string) {
-    const kind = fieldDef(field)?.kind ?? "text";
-    updateRule(i, { field, op: OPERATORS_FOR_KIND[kind][0], value: "" });
-  }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      action={formAction}
+      onSubmit={(e) => {
+        setSubmitted(true);
+        if (hasProblems) e.preventDefault();
+      }}
+      className="space-y-6"
+    >
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="definition" value={defJson} />
       {segment && <input type="hidden" name="id" value={segment.id} />}
@@ -164,90 +211,27 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
             <span>of these conditions:</span>
           </div>
 
-          <div className="space-y-2">
-            {rules.map((rule, i) => {
-              const def = fieldDef(rule.field);
-              const kind = def?.kind ?? "text";
-              const showValue = !VALUELESS_OPS.includes(rule.op);
-              return (
-                <div key={i} className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={rule.field}
-                    onValueChange={(v) => onFieldChange(i, v)}
-                  >
-                    <SelectTrigger className="w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SEGMENT_FIELDS.map((f) => (
-                        <SelectItem key={f.key} value={f.key}>
-                          {f.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={rule.op}
-                    onValueChange={(v) =>
-                      updateRule(i, {
-                        op: v as Operator,
-                        value: VALUELESS_OPS.includes(v as Operator)
-                          ? undefined
-                          : (rule.value ?? ""),
-                      })
-                    }
-                  >
-                    <SelectTrigger className="w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPERATORS_FOR_KIND[kind].map((op) => (
-                        <SelectItem key={op} value={op}>
-                          {OPERATOR_LABELS[op]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {showValue &&
-                    (kind === "enum" ? (
-                      <Select
-                        value={rule.value ?? ""}
-                        onValueChange={(v) => updateRule(i, { value: v })}
-                      >
-                        <SelectTrigger className="w-44">
-                          <SelectValue placeholder="Select…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(def?.options ?? []).map((o) => (
-                            <SelectItem key={o} value={o}>
-                              {statusLabel(o)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        className="w-44"
-                        value={rule.value ?? ""}
-                        onChange={(e) => updateRule(i, { value: e.target.value })}
-                        placeholder="value"
-                      />
-                    ))}
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => removeRule(i)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              );
-            })}
+          <div className="space-y-3">
+            {rules.map((rule, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <SegmentRuleFields
+                  rule={rule}
+                  onChange={(patch) => updateRule(i, patch)}
+                  showErrors={submitted}
+                  idPrefix={`rule-${i}`}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  onClick={() => removeRule(i)}
+                  aria-label={`Remove condition ${i + 1}`}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            ))}
           </div>
 
           <Button type="button" variant="outline" size="sm" onClick={addRule}>
@@ -256,8 +240,24 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
 
           {rules.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No conditions — this segment will include all contacts.
+              {startedAsExplicitList
+                ? "No conditions — this segment keeps the exact list of people already in it."
+                : "No conditions — this segment will include all contacts."}
             </p>
+          )}
+
+          {willReplaceList && (
+            <div className="flex gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <p>
+                This segment currently holds a fixed list
+                {typeof memberCount === "number"
+                  ? ` of ${memberCount} contact${memberCount === 1 ? "" : "s"}`
+                  : ""}
+                . Saving with conditions replaces that list with whatever the
+                filter matches — anyone not matching is dropped.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -266,25 +266,37 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="text-base">Matching contacts</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {previewing && !preview ? (
-                "Calculating…"
-              ) : preview ? (
-                <>
-                  <span className="font-semibold text-foreground">
-                    {preview.count}
-                  </span>{" "}
-                  of {preview.total} contacts match
-                </>
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              {hasProblems ? (
+                "Finish every condition to see matches."
+              ) : preview?.error ? (
+                <span className="text-destructive">{preview.error}</span>
               ) : (
-                "Calculating…"
+                <>
+                  {preview ? (
+                    <>
+                      <span className="font-semibold text-foreground">
+                        {preview.count}
+                      </span>{" "}
+                      of {preview.total} contacts match
+                    </>
+                  ) : (
+                    "Calculating…"
+                  )}
+                  {previewing && !hasProblems && (
+                    <Loader2
+                      className="size-3.5 animate-spin"
+                      aria-label="Recalculating"
+                    />
+                  )}
+                </>
               )}
             </p>
           </div>
           <Users className="size-5 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {preview && preview.count > 0 ? (
+          {preview && !preview.error && preview.count > 0 ? (
             <>
               <div className="rounded-lg border">
                 <Table>
@@ -320,15 +332,21 @@ export function SegmentBuilder({ segment }: { segment?: Segment }) {
             </>
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {preview ? "No contacts match yet — adjust the filter above." : ""}
+              {hasProblems
+                ? ""
+                : preview && !preview.error
+                  ? "No contacts match yet — adjust the filter above."
+                  : ""}
             </p>
           )}
         </CardContent>
       </Card>
 
       <div className="flex items-center justify-end gap-3">
-        {state.error && (
-          <span className="text-sm text-destructive">{state.error}</span>
+        {(state.error || (submitted && hasProblems)) && (
+          <span className="text-sm text-destructive">
+            {state.error ?? "Finish configuring every condition."}
+          </span>
         )}
         <Button type="submit" disabled={pending || !name.trim()}>
           {pending ? "Saving…" : segment ? "Save segment" : "Create segment"}

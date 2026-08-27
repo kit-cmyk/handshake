@@ -33,6 +33,7 @@ import {
 import { DataTable } from "@/components/data-table";
 import { BulkDeleteButton } from "@/components/bulk-delete-button";
 import { useBulkTask } from "@/components/bulk-task";
+import { AddToSegmentButton } from "./add-to-segment-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
@@ -379,6 +380,7 @@ export function ContactsTable({
       }
       bulkActions={({ rows, clear }) => (
         <>
+          <AddToSegmentButton ids={rows.map((r) => r.id)} onDone={clear} />
           {owners.length > 0 && (
             <BulkAssignOwner
               ids={rows.map((r) => r.id)}

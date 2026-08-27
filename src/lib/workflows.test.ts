@@ -55,8 +55,18 @@ const contact = (stage: string): EvaluableContact => ({
   first_name: "A",
   last_name: "B",
   title: null,
+  phone: null,
   source: null,
+  lead_source: null,
+  address: null,
+  city: null,
+  region: null,
+  postal_code: null,
+  country: null,
   lifecycle_stage: stage as EvaluableContact["lifecycle_stage"],
+  unsubscribed_at: null,
+  appointment_date: null,
+  created_at: "2026-01-01T00:00:00.000Z",
   companies: null,
 });
 

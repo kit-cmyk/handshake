@@ -9,10 +9,8 @@ import { getEmailProvider, defaultFrom } from "@/lib/email/provider";
 import { renderTemplate, withUnsubscribe } from "@/lib/email/template";
 import { wrapEmail } from "@/lib/email/layout";
 import {
-  evaluateFilter,
-  parseDefinition,
-  EVALUABLE_SELECT,
-  type EvaluableContact,
+  fetchSegmentMemberIds,
+  type Segment,
 } from "@/lib/segments";
 import {
   parseGraph,
@@ -33,6 +31,11 @@ const TRIGGERS: TriggerType[] = [
   "stage_change",
 ];
 
+/**
+ * Everyone in a segment: a live evaluation for a dynamic one, the cached
+ * membership for a static one. Both reads page past the 1000-row cap — this is
+ * the list that decides who gets enrolled into the workflow.
+ */
 async function resolveSegmentContactIds(
   supabase: SupabaseClient,
   orgId: string,
@@ -40,25 +43,16 @@ async function resolveSegmentContactIds(
 ): Promise<string[]> {
   const { data: segment } = await supabase
     .from("segments")
-    .select("type, definition")
+    .select("id, type, definition")
     .eq("id", segmentId)
-    .single();
+    .eq("org_id", orgId)
+    .maybeSingle();
   if (!segment) return [];
-  if (segment.type === "dynamic") {
-    const { data: contacts } = await supabase
-      .from("contacts")
-      .select(EVALUABLE_SELECT)
-      .eq("org_id", orgId);
-    return evaluateFilter(
-      (contacts ?? []) as unknown as EvaluableContact[],
-      parseDefinition(segment.definition)
-    ).map((c) => c.id);
-  }
-  const { data: members } = await supabase
-    .from("segment_members")
-    .select("contact_id")
-    .eq("segment_id", segmentId);
-  return (members ?? []).map((m) => (m as { contact_id: string }).contact_id);
+  return fetchSegmentMemberIds(
+    supabase,
+    orgId,
+    segment as Pick<Segment, "id" | "type" | "definition">
+  );
 }
 
 export async function saveWorkflow(
@@ -107,6 +101,52 @@ export async function saveWorkflow(
   // Reject structurally-broken graphs (unreachable steps, cycles).
   if (validateGraph(graph).some((i) => i.severity === "error")) {
     return { error: "Fix the workflow structure before saving." };
+  }
+
+  // Every referenced segment must belong to this org and, for `add_to_segment`,
+  // be static: a dynamic segment's membership is replaced wholesale by the
+  // hourly re-evaluation, so a contact added by a workflow would vanish again
+  // within the hour. RLS hides foreign rows on read but doesn't validate a
+  // foreign id embedded in the graph JSON, so check it here.
+  const referencedSegmentIds = [
+    ...new Set(
+      [
+        (trigger_config as { segmentId?: string }).segmentId,
+        (exit_config as { segmentId?: string } | undefined)?.segmentId,
+        ...graph.nodes.map((n) =>
+          typeof n.data?.config?.segmentId === "string"
+            ? n.data.config.segmentId
+            : undefined
+        ),
+      ].filter((s): s is string => !!s)
+    ),
+  ];
+  if (referencedSegmentIds.length) {
+    const { data: owned } = await supabase
+      .from("segments")
+      .select("id, type")
+      .eq("org_id", org.id)
+      .in("id", referencedSegmentIds);
+    const byId = new Map(
+      (owned ?? []).map((s) => [
+        (s as { id: string }).id,
+        (s as { type: string }).type,
+      ])
+    );
+    if (referencedSegmentIds.some((sid) => !byId.has(sid)))
+      return { error: "One of the chosen segments no longer exists." };
+
+    const writesToDynamic = graph.nodes.some(
+      (n) =>
+        n.data?.action === "add_to_segment" &&
+        typeof n.data.config?.segmentId === "string" &&
+        byId.get(n.data.config.segmentId) === "dynamic"
+    );
+    if (writesToDynamic)
+      return {
+        error:
+          "“Add to segment” needs a static segment — a dynamic one rebuilds its members from its filter.",
+      };
   }
 
   // The review step's "Set live" submits go_live=1: save and start running so

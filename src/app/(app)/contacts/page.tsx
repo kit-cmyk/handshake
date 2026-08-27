@@ -58,6 +58,8 @@ export default async function ContactsPage({
         .from("segments")
         .select("id, name, type, definition")
         .eq("org_id", org.id)
+        // Campaign-managed audience lists aren't user-facing segments.
+        .eq("managed", false)
         .order("name"),
       supabase
         .from("memberships")

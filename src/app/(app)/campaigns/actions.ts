@@ -5,10 +5,8 @@ import { redirect } from "next/navigation";
 import { requireContext } from "@/lib/context";
 import { inngest } from "@/lib/inngest/client";
 import {
-  evaluateFilter,
-  parseDefinition,
-  EVALUABLE_SELECT,
-  type EvaluableContact,
+  fetchSegmentMemberIds,
+  type Segment,
 } from "@/lib/segments";
 import { getEmailProvider, defaultFrom } from "@/lib/email/provider";
 import {
@@ -198,6 +196,10 @@ export async function saveCampaign(
           name: segmentName,
           type: "static",
           definition: { match: "all", rules: [] },
+          // Owned by this campaign: hidden from /segments and from every
+          // segment picker, so nobody renames, re-filters or deletes the list a
+          // live campaign is sending against.
+          managed: true,
         })
         .select("id")
         .single();
@@ -284,6 +286,12 @@ export async function saveCampaign(
   redirect(`/campaigns/${campaignId}`);
 }
 
+/**
+ * Everyone in a segment: a live evaluation for a dynamic one, the cached
+ * membership for a static one. Both reads page past the 1000-row cap — this is
+ * the list that decides who gets enrolled, so a truncated read means a silent
+ * mail-out to a fraction of the audience.
+ */
 async function resolveMemberIds(
   supabase: Awaited<ReturnType<typeof requireContext>>["supabase"],
   orgId: string,
@@ -291,26 +299,16 @@ async function resolveMemberIds(
 ): Promise<string[]> {
   const { data: segment } = await supabase
     .from("segments")
-    .select("type, definition")
+    .select("id, type, definition")
     .eq("id", segmentId)
-    .single();
+    .eq("org_id", orgId)
+    .maybeSingle();
   if (!segment) return [];
-
-  if (segment.type === "dynamic") {
-    const { data: contacts } = await supabase
-      .from("contacts")
-      .select(EVALUABLE_SELECT)
-      .eq("org_id", orgId);
-    return evaluateFilter(
-      (contacts ?? []) as unknown as EvaluableContact[],
-      parseDefinition(segment.definition)
-    ).map((c) => c.id);
-  }
-  const { data: members } = await supabase
-    .from("segment_members")
-    .select("contact_id")
-    .eq("segment_id", segmentId);
-  return (members ?? []).map((m) => (m as { contact_id: string }).contact_id);
+  return fetchSegmentMemberIds(
+    supabase,
+    orgId,
+    segment as Pick<Segment, "id" | "type" | "definition">
+  );
 }
 
 export async function enrollCampaign(

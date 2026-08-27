@@ -4,6 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
+  Copy,
+  Download,
   ListFilter,
   MoreHorizontal,
   Pencil,
@@ -29,11 +31,15 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { BulkDeleteButton } from "@/components/bulk-delete-button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { SegmentSheet } from "./segment-sheet";
-import { bulkDeleteSegments, deleteSegment, refreshSnapshot } from "./actions";
-import { parseDefinition, type Segment } from "@/lib/segments";
+import {
+  DeleteSegmentDialog,
+  useSegmentDuplicate,
+  useSegmentExport,
+} from "./segment-row-actions";
+import { bulkDeleteSegments, refreshSnapshot } from "./actions";
+import { type Segment } from "@/lib/segments";
 import { statusLabel } from "@/lib/utils";
 
 export type SegmentRow = {
@@ -41,7 +47,10 @@ export type SegmentRow = {
   name: string;
   type: "static" | "dynamic";
   members: number;
+  /** How many filter conditions the definition holds. */
+  rules: number;
   updated_at: string;
+  last_evaluated_at: string | null;
   /** Full segment, for the row actions (edit/refresh). */
   segment: Segment;
 };
@@ -49,6 +58,8 @@ export type SegmentRow = {
 export function SegmentsTable({ data }: { data: SegmentRow[] }) {
   const router = useRouter();
   const [type, setType] = React.useState<string>("all");
+  const exporter = useSegmentExport();
+  const duplicator = useSegmentDuplicate();
 
   const filtered = React.useMemo(
     () => (type === "all" ? data : data.filter((s) => s.type === type)),
@@ -77,6 +88,24 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
       },
       { accessorKey: "members", header: "Members" },
       {
+        accessorKey: "last_evaluated_at",
+        header: "Members from",
+        cell: ({ row }) => {
+          const r = row.original;
+          // A dynamic segment is recomputed on read, so its membership is never
+          // stale — only a static snapshot has an age worth showing.
+          if (r.type === "dynamic")
+            return <span className="text-muted-foreground">Live</span>;
+          return (
+            <span className="text-muted-foreground">
+              {r.last_evaluated_at
+                ? new Date(r.last_evaluated_at).toLocaleDateString()
+                : "—"}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "updated_at",
         header: "Updated",
         cell: ({ getValue }) => (
@@ -90,10 +119,11 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
         header: "",
         enableSorting: false,
         cell: ({ row }) => {
-          const seg = row.original.segment;
-          const canRefresh =
-            seg.type === "static" &&
-            parseDefinition(seg.definition).rules.length > 0;
+          const r = row.original;
+          const seg = r.segment;
+          // Re-running a snapshot only means something when there's a filter to
+          // re-run; a hand-built or imported list has nothing to re-evaluate.
+          const canRefresh = seg.type === "static" && r.rules > 0;
           return (
             <div
               className="flex justify-end"
@@ -107,20 +137,31 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onSelect={() =>
-                      router.push(`/contacts?segment=${row.original.id}`)
-                    }
+                    onSelect={() => router.push(`/contacts?segment=${r.id}`)}
                   >
                     <Users className="size-4" /> View contacts
                   </DropdownMenuItem>
                   <SegmentSheet
                     segment={seg}
+                    memberCount={r.members}
                     trigger={
                       <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                         <Pencil className="size-4" /> Edit
                       </DropdownMenuItem>
                     }
                   />
+                  <DropdownMenuItem
+                    disabled={duplicator.pending}
+                    onSelect={() => void duplicator.run(r.id)}
+                  >
+                    <Copy className="size-4" /> Duplicate
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={exporter.pending}
+                    onSelect={() => void exporter.run(r.id)}
+                  >
+                    <Download className="size-4" /> Export CSV
+                  </DropdownMenuItem>
                   {canRefresh && (
                     <DropdownMenuItem
                       onSelect={async () => {
@@ -132,7 +173,10 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <ConfirmDialog
+                  <DeleteSegmentDialog
+                    id={r.id}
+                    name={r.name}
+                    onDeleted={() => router.refresh()}
                     trigger={
                       <DropdownMenuItem
                         className="text-destructive"
@@ -141,12 +185,6 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
                         <Trash2 className="size-4" /> Delete
                       </DropdownMenuItem>
                     }
-                    title="Delete segment?"
-                    description="This permanently deletes the segment. Contacts themselves are not affected. This can't be undone."
-                    onConfirm={async () => {
-                      await deleteSegment(row.original.id);
-                      router.refresh();
-                    }}
                   />
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -155,46 +193,53 @@ export function SegmentsTable({ data }: { data: SegmentRow[] }) {
         },
       },
     ],
-    [router],
+    [router, exporter, duplicator],
   );
 
   return (
-    <DataTable
-      columns={columns}
-      data={filtered}
-      getRowId={(r) => r.id}
-      enableSelection
-      enableSearch
-      searchPlaceholder="Search segments…"
-      onRowClick={(r) => router.push(`/contacts?segment=${r.id}`)}
-      toolbar={
-        <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="h-9 w-[150px]">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="dynamic">Dynamic</SelectItem>
-            <SelectItem value="static">Static</SelectItem>
-          </SelectContent>
-        </Select>
-      }
-      bulkActions={({ rows, clear }) => (
-        <BulkDeleteButton
-          ids={rows.map((r) => r.id)}
-          action={bulkDeleteSegments}
-          onDone={clear}
-          noun="segment"
-        />
+    <div className="space-y-2">
+      {exporter.error && (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {exporter.error}
+        </p>
       )}
-      emptyState={
-        <EmptyState
-          bare
-          icon={ListFilter}
-          title="No segments carved out yet"
-          description="Slice your contacts by any criteria — lifecycle, industry, city — so every message lands with the right crowd."
-        />
-      }
-    />
+      <DataTable
+        columns={columns}
+        data={filtered}
+        getRowId={(r) => r.id}
+        enableSelection
+        enableSearch
+        searchPlaceholder="Search segments…"
+        onRowClick={(r) => router.push(`/segments/${r.id}`)}
+        toolbar={
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="dynamic">Dynamic</SelectItem>
+              <SelectItem value="static">Static</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+        bulkActions={({ rows, clear }) => (
+          <BulkDeleteButton
+            ids={rows.map((r) => r.id)}
+            action={bulkDeleteSegments}
+            onDone={clear}
+            noun="segment"
+          />
+        )}
+        emptyState={
+          <EmptyState
+            bare
+            icon={ListFilter}
+            title="No segments carved out yet"
+            description="Slice your contacts by any criteria — lifecycle, city, industry, when they were added — so every message lands with the right crowd."
+          />
+        }
+      />
+    </div>
   );
 }
