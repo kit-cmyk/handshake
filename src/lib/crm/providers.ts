@@ -93,7 +93,9 @@ export const CRM_PROVIDERS: CrmProviderMeta[] = [
     description: "Sync your Pipedrive people and their organizations.",
     docsUrl:
       "https://pipedrive.readme.io/docs/how-to-find-the-api-token",
-    chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    // Neutral on purpose: the Pipedrive mark paints with `currentColor`, so the
+    // chip's text colour is what keeps it legible in both themes.
+    chip: "bg-zinc-900/10 text-zinc-900 dark:bg-zinc-100/15 dark:text-zinc-100",
     fields: [
       {
         key: "company_domain",
@@ -140,7 +142,7 @@ export const CRM_PROVIDERS: CrmProviderMeta[] = [
     auth: "token",
     description: "Import contacts from Zoho CRM.",
     docsUrl: "https://www.zoho.com/crm/developer/docs/api/v5/access-refresh.html",
-    chip: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+    chip: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
     fields: [
       {
         key: "api_domain",
@@ -180,7 +182,7 @@ export const CRM_PROVIDERS: CrmProviderMeta[] = [
     auth: "oauth",
     description: "Import your Housecall Pro customers as contacts.",
     docsUrl: "https://docs.housecallpro.com/docs/housecall-public-api/",
-    chip: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+    chip: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
     fields: [],
     oauth: {
       authorizeUrl: "https://api.housecallpro.com/oauth/authorize",
@@ -213,7 +215,7 @@ export const CRM_PROVIDERS: CrmProviderMeta[] = [
     description: "Sync QuickBooks Online customers into Handshake contacts.",
     docsUrl:
       "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0",
-    chip: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+    chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
     fields: [],
     oauth: {
       authorizeUrl: "https://appcenter.intuit.com/connect/oauth2",
