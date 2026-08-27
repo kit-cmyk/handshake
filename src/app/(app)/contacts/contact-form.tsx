@@ -31,6 +31,7 @@ import {
 import { COUNTRIES } from "@/lib/countries";
 
 type CompanyOption = { id: string; name: string };
+type OwnerOption = { id: string; name: string };
 
 const NONE = "none";
 
@@ -42,12 +43,15 @@ export function ContactForm({
   contact,
   companies,
   leadSources = [],
+  owners = [],
   onSuccess,
   onCancel,
 }: {
   contact?: Contact;
   companies: CompanyOption[];
   leadSources?: string[];
+  /** Org members who can own a contact. Empty hides the picker. */
+  owners?: OwnerOption[];
   /** Fired after a successful save (router.refresh already ran). */
   onSuccess?: () => void;
   /** When provided, renders a Cancel button. */
@@ -68,6 +72,9 @@ export function ContactForm({
     contact?.lead_source ?? ""
   );
   const [country, setCountry] = React.useState<string>(contact?.country ?? "");
+  const [ownerId, setOwnerId] = React.useState<string>(
+    contact?.owner_id ?? NONE
+  );
 
   React.useEffect(() => {
     if (state.ok) {
@@ -87,6 +94,13 @@ export function ContactForm({
       <input type="hidden" name="lifecycle_stage" value={stage} />
       <input type="hidden" name="lead_source" value={leadSource} />
       <input type="hidden" name="country" value={country} />
+      {owners.length > 0 && (
+        <input
+          type="hidden"
+          name="owner_id"
+          value={ownerId === NONE ? "" : ownerId}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -169,6 +183,26 @@ export function ContactForm({
           </SelectContent>
         </Select>
       </div>
+
+      {owners.length > 0 && (
+        <div className="space-y-2">
+          <Label>Owner</Label>
+          <Select value={ownerId} onValueChange={setOwnerId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Unassigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Unassigned</SelectItem>
+              {owners.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldError id="owner_id">{errorFor(state, "owner_id")}</FieldError>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="lead_source">Lead source</Label>

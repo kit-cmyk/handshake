@@ -12,16 +12,20 @@ import { ContactForm } from "./contact-form";
 import { type Contact } from "@/lib/types";
 
 type CompanyOption = { id: string; name: string };
+type OwnerOption = { id: string; name: string };
 
 export function ContactDialog({
   companies,
   contact,
   leadSources = [],
+  owners = [],
   trigger,
   onSaved,
 }: {
   companies: CompanyOption[];
   contact?: Contact;
+  /** Org members who can own a contact. */
+  owners?: OwnerOption[];
   /** Existing lead sources across the org, for the searchable combobox. */
   leadSources?: string[];
   trigger: React.ReactNode;
@@ -41,6 +45,7 @@ export function ContactDialog({
           contact={contact}
           companies={companies}
           leadSources={leadSources}
+          owners={owners}
           onSuccess={() => {
             setOpen(false);
             onSaved?.();

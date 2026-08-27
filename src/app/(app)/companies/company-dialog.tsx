@@ -13,10 +13,13 @@ import type { Company } from "@/lib/types";
 
 export function CompanyDialog({
   company,
+  categories,
   trigger,
   onSaved,
 }: {
   company?: Company;
+  /** Options for the category combobox; defaults to the built-in list. */
+  categories?: string[];
   trigger: React.ReactNode;
   onSaved?: () => void;
 }) {
@@ -31,6 +34,7 @@ export function CompanyDialog({
         </SheetHeader>
         <CompanyForm
           company={company}
+          categories={categories}
           onSuccess={() => {
             setOpen(false);
             onSaved?.();

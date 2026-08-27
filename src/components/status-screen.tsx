@@ -24,7 +24,7 @@ export function StatusScreen({
   description?: React.ReactNode;
   /** Action buttons. */
   children?: React.ReactNode;
-  /** Give the icon a friendly wave instead of a float (nice for handshakes). */
+  /** Give the icon a friendly wave (nice for handshakes). */
   wave?: boolean;
   className?: string;
 }) {
@@ -48,7 +48,7 @@ export function StatusScreen({
           className={cn(
             "grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-xl shadow-primary/25",
             code ? "absolute" : "",
-            wave ? "animate-hs-wave" : "animate-hs-float",
+            wave && "animate-hs-wave",
           )}
         >
           <Icon className="size-8" strokeWidth={2} />

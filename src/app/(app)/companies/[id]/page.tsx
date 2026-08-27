@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { CompanyDialog } from "../company-dialog";
+import { listCompanyCategories } from "../actions";
 import { DeleteCompanyButton } from "./delete-company-button";
 import { contactName, type Company, type Contact } from "@/lib/types";
 
@@ -31,11 +32,14 @@ export default async function CompanyDetailPage({
 
   if (!company) notFound();
 
-  const { data: contacts } = await supabase
-    .from("contacts")
-    .select("*")
-    .eq("company_id", id)
-    .order("created_at", { ascending: false });
+  const [{ data: contacts }, categories] = await Promise.all([
+    supabase
+      .from("contacts")
+      .select("*")
+      .eq("company_id", id)
+      .order("created_at", { ascending: false }),
+    listCompanyCategories(),
+  ]);
 
   const co = company as Company;
   const people = (contacts ?? []) as Contact[];
@@ -61,6 +65,7 @@ export default async function CompanyDetailPage({
           <>
             <CompanyDialog
               company={co}
+              categories={categories}
               trigger={
                 <Button variant="outline" size="sm">
                   <Pencil className="size-4" /> Edit

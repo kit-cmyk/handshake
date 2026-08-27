@@ -26,7 +26,14 @@ import { CompanySheet } from "./company-sheet";
 import { bulkDeleteCompanies, deleteCompany } from "./actions";
 import type { Company } from "@/lib/types";
 
-export function CompaniesTable({ data }: { data: Company[] }) {
+export function CompaniesTable({
+  data,
+  categories,
+}: {
+  data: Company[];
+  /** Options for the edit form's category combobox; defaults to the built-ins. */
+  categories?: string[];
+}) {
   const router = useRouter();
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -82,6 +89,7 @@ export function CompaniesTable({ data }: { data: Company[] }) {
               <DropdownMenuContent align="end">
                 <CompanyDialog
                   company={row.original}
+                  categories={categories}
                   trigger={
                     <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                       <Pencil className="size-4" /> Edit
@@ -110,7 +118,7 @@ export function CompaniesTable({ data }: { data: Company[] }) {
         ),
       },
     ],
-    [router],
+    [router, categories],
   );
 
   return (

@@ -33,7 +33,7 @@ export default async function ContactsPage({
   const { segment: segmentParam } = await searchParams;
   const { supabase, org } = await requireContext();
 
-  const [contacts, { data: companies }, { data: segments }] =
+  const [contacts, { data: companies }, { data: segments }, { data: members }] =
     await Promise.all([
       // Page past PostgREST's 1000-row cap. The table's row count, the issue
       // banner and the lead-source list all describe the whole book, so a
@@ -61,9 +61,33 @@ export default async function ContactsPage({
         // Campaign-managed audience lists aren't user-facing segments.
         .eq("managed", false)
         .order("name"),
+      supabase
+        .from("memberships")
+        .select("user_id, profiles(full_name, email)")
+        .eq("org_id", org.id),
     ]);
 
   const companyOptions = (companies ?? []) as { id: string; name: string }[];
+
+  // Owner picker + table column. `profiles` comes back as a nested row (typed as
+  // an array by the client), so narrow it the same way the team settings page
+  // does. Falls back to the email, then a placeholder, so a member with no
+  // profile name still renders as something selectable.
+  const ownerOptions = (members ?? []).map((m) => {
+    const row = m as unknown as {
+      user_id: string;
+      profiles:
+        | { full_name: string | null; email: string | null }
+        | { full_name: string | null; email: string | null }[]
+        | null;
+    };
+    const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    return {
+      id: row.user_id,
+      name: p?.full_name?.trim() || p?.email || "Unknown member",
+    };
+  });
+  ownerOptions.sort((a, b) => a.name.localeCompare(b.name));
   const allContacts = contacts;
   const segs = (segments ?? []) as Segment[];
 
@@ -169,6 +193,7 @@ export default async function ContactsPage({
             <ContactDialog
               companies={companyOptions}
               leadSources={leadSources}
+              owners={ownerOptions}
               trigger={
                 <Button>
                   <Plus className="size-4" /> Add contact
@@ -184,6 +209,7 @@ export default async function ContactsPage({
         health={health}
         companies={companyOptions}
         leadSources={leadSources}
+        owners={ownerOptions}
         segments={segs.map((s) => ({ id: s.id, name: s.name }))}
         selectedSegmentId={selectedSegment?.id ?? null}
         selectedSegmentName={selectedSegment?.name ?? null}
