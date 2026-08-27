@@ -4,6 +4,7 @@
 // unit-testable and reusable by the server component and any future callers.
 
 import type { Activity, Message, TimelineEntry } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 export type TimelineEvent = {
   id: string;
@@ -72,6 +73,6 @@ export function eventLabel(
       return typeof to === "string" && to ? `Moved to ${to}` : "Stage changed";
     }
     default:
-      return type;
+      return statusLabel(type);
   }
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useActionState, useTransition } from "react";
@@ -27,6 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { NavButton } from "@/components/nav-button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   searchLeads,
   importLeads,
@@ -39,7 +40,7 @@ import {
 } from "./actions";
 
 // Leaflet touches `window`, so load the map client-only.
-const ProspectMap = dynamic(() => import("./prospect-map"), {
+const LeadMap = dynamic(() => import("./lead-map"), {
   ssr: false,
   loading: () => (
     <div className="h-80 w-full animate-pulse rounded-lg border bg-muted/40" />
@@ -54,56 +55,24 @@ const RATING_OPTIONS = [
   { value: "4.5", label: "4.5+" },
 ];
 
-type Mode = "companies" | "people";
-
-export function ProspectForm() {
-  const [mode, setMode] = React.useState<Mode>("companies");
-
+export function LeadSearch() {
   return (
-    <div className="space-y-4">
-      <div className="flex w-fit rounded-md border p-0.5">
-        <ModeButton
-          active={mode === "companies"}
-          onClick={() => setMode("companies")}
-          icon={Building2}
-          label="Companies"
-        />
-        <ModeButton
-          active={mode === "people"}
-          onClick={() => setMode("people")}
-          icon={Users}
-          label="People"
-        />
-      </div>
-
-      {mode === "companies" ? <CompanySearch /> : <PeopleSearch />}
-    </div>
-  );
-}
-
-function ModeButton({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium ${
-        active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <Icon className="size-4" /> {label}
-    </button>
+    <Tabs defaultValue="companies">
+      <TabsList>
+        <TabsTrigger value="companies">
+          <Building2 /> Companies
+        </TabsTrigger>
+        <TabsTrigger value="people">
+          <Users /> People
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="companies">
+        <CompanySearch />
+      </TabsContent>
+      <TabsContent value="people">
+        <PeopleSearch />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -244,7 +213,7 @@ function CompanySearch() {
                   id="min_rating"
                   name="min_rating"
                   defaultValue="0"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   {RATING_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -357,7 +326,7 @@ function CompanySearch() {
           </CardHeader>
           <CardContent className="space-y-4">
             {view === "map" ? (
-              <ProspectMap
+              <LeadMap
                 center={state.center ?? null}
                 radiusMeters={state.radiusMeters ?? null}
                 hits={mapHits}
@@ -447,11 +416,12 @@ function CompanySearch() {
                     {importResult.skipped} already existed
                   </Badge>
                 )}
-                <Button variant="outline" size="sm" asChild className="ml-auto">
-                  <Link href="/companies">
-                    <Building2 className="size-4" /> View in Companies
-                  </Link>
-                </Button>
+                <NavButton
+                  to="companies"
+                  label="View in Companies"
+                  size="sm"
+                  className="ml-auto"
+                />
               </div>
             )}
             {importResult?.error && (
@@ -712,11 +682,12 @@ function PeopleSearch() {
                     {importResult.skipped} already existed
                   </Badge>
                 )}
-                <Button variant="outline" size="sm" asChild className="ml-auto">
-                  <Link href="/contacts">
-                    <Users className="size-4" /> View in Contacts
-                  </Link>
-                </Button>
+                <NavButton
+                  to="contacts"
+                  label="View in Contacts"
+                  size="sm"
+                  className="ml-auto"
+                />
               </div>
             )}
             {importResult?.error && (

@@ -10,8 +10,17 @@ import {
   type MailboxSender,
 } from "@/lib/email/send";
 import { renderTemplate, type MergeContact } from "@/lib/email/template";
+import { resolveBookingLink } from "@/lib/email/booking-link";
 import { wrapEmail } from "@/lib/email/layout";
 import { makeSnippet } from "@/lib/inbox/inbound";
+import { resolveCopyList } from "@/lib/email/recipients";
+import { EMAIL_RE } from "@/lib/data-quality";
+import {
+  buildThreadHeaders,
+  newMessageId,
+  replySubject,
+  threadHeaderFields,
+} from "@/lib/inbox/threading";
 import {
   ACTIVITY_TYPES,
   CONVERSATION_STATUSES,
@@ -107,6 +116,11 @@ function mergeFrom(contact: ContactRow | null): MergeContact {
 /**
  * Render, send, and record an outbound email against a conversation. Returns an
  * error message, or null on success. Shared by reply + compose.
+ *
+ * The send always joins the conversation's thread: it carries a Message-ID we
+ * mint plus In-Reply-To / References built from the thread's earlier ids, so the
+ * recipient's mail client files it under the same conversation instead of
+ * opening a new one — and so an inbound reply resolves back to this thread.
  */
 async function deliverEmail(params: {
   supabase: SupabaseClient;
@@ -115,6 +129,8 @@ async function deliverEmail(params: {
   conversationId: string;
   contactId: string;
   to: string;
+  cc?: string[];
+  bcc?: string[];
   merge: MergeContact;
   subject: string;
   bodyHtml: string;
@@ -123,27 +139,40 @@ async function deliverEmail(params: {
     params.supabase,
     params.orgId
   );
-  const { data: orgRow } = await params.supabase
-    .from("organizations")
-    .select("booking_url")
-    .eq("id", params.orgId)
-    .maybeSingle();
+  const bookingLink = await resolveBookingLink(params.supabase, {
+    orgId: params.orgId,
+    userId: params.userId,
+  });
 
   const merge: MergeContact = {
     ...params.merge,
     sender_name: senderName,
     sender_email: senderEmail,
-    booking_link: (orgRow?.booking_url as string | null) ?? "",
+    booking_link: bookingLink,
   };
   const renderedSubject = renderTemplate(params.subject, merge);
   const renderedHtml = renderTemplate(params.bodyHtml, merge);
 
+  // The thread's existing header ids, oldest first, become In-Reply-To/References.
+  const { data: priorRows } = await params.supabase
+    .from("messages")
+    .select("message_id")
+    .eq("conversation_id", params.conversationId)
+    .order("created_at", { ascending: true });
+  const thread = buildThreadHeaders(
+    newMessageId(senderEmail),
+    ((priorRows ?? []) as { message_id: string | null }[]).map((r) => r.message_id)
+  );
+
   const res = await sendViaMailbox(params.supabase, mailbox, {
     from,
     to: params.to,
+    cc: params.cc,
+    bcc: params.bcc,
     subject: renderedSubject,
     html: wrapEmail(renderedHtml, { preheader: makeSnippet({ html: renderedHtml }) }),
     replyTo,
+    headers: threadHeaderFields(thread),
   });
   if (res.status === "failed") return res.error || "Failed to send email.";
 
@@ -157,16 +186,24 @@ async function deliverEmail(params: {
     channel: "email",
     from_address: from,
     to_address: params.to,
+    cc_addresses: params.cc?.length ? params.cc : null,
+    bcc_addresses: params.bcc?.length ? params.bcc : null,
     subject: renderedSubject,
     body_html: renderedHtml,
     snippet: makeSnippet({ html: renderedHtml }),
     user_id: params.userId,
     provider_message_id: res.id || null,
+    message_id: thread.messageId,
+    in_reply_to: thread.inReplyTo,
   });
   return error ? error.message : null;
 }
 
-/** Send a reply within an existing conversation. */
+/**
+ * Send a reply within an existing conversation. The subject is the thread's own
+ * ("Re: …") unless the sender deliberately renamed it in the composer, so a
+ * reply stays in one thread instead of forking a new one on the other side.
+ */
 export async function sendEmail(
   conversationId: string,
   _prev: SendState,
@@ -177,88 +214,210 @@ export async function sendEmail(
   const { data: conv } = await supabase
     .from("conversations")
     .select(
-      "id, contact_id, contacts(first_name, last_name, email, phone, title, lifecycle_stage, companies(name))"
+      "id, contact_id, subject, status, contacts(first_name, last_name, email, phone, title, lifecycle_stage, companies(name))"
     )
     .eq("id", conversationId)
     .maybeSingle();
   if (!conv) return { error: "Conversation not found." };
 
-  const contact = (conv as unknown as { contacts: ContactRow | null }).contacts;
+  const c = conv as unknown as {
+    contact_id: string;
+    subject: string | null;
+    status: ConversationStatus;
+    contacts: ContactRow | null;
+  };
+  const contact = c.contacts;
   const to = contact?.email?.trim();
   if (!to) return { error: "This contact has no email address." };
 
-  const subject = String(fd.get("subject") ?? "").trim();
+  const typed = String(fd.get("subject") ?? "").trim();
+  const subject = typed || replySubject(c.subject);
   const bodyHtml = String(fd.get("body") ?? "").trim();
   if (!subject) return { error: "Add a subject." };
   if (!bodyHtml || bodyHtml === "<p></p>") return { error: "Write a message first." };
+
+  const cc = resolveCopyList(String(fd.get("cc") ?? ""), "Cc", [to]);
+  if (cc.error) return { error: cc.error };
+  const bcc = resolveCopyList(String(fd.get("bcc") ?? ""), "Bcc", [
+    to,
+    ...cc.addresses,
+  ]);
+  if (bcc.error) return { error: bcc.error };
 
   const error = await deliverEmail({
     supabase,
     orgId: org.id,
     userId,
     conversationId,
-    contactId: (conv as { contact_id: string }).contact_id,
+    contactId: c.contact_id,
     to,
+    cc: cc.addresses,
+    bcc: bcc.addresses,
     merge: mergeFrom(contact),
     subject,
     bodyHtml,
   });
   if (error) return { error };
 
+  // A thread we're still talking in isn't closed — reopen it like a ticket.
+  if (c.status === "closed") {
+    await supabase
+      .from("conversations")
+      .update({ status: "open" })
+      .eq("id", conversationId);
+  }
+
   revalidatePath("/inbox");
   return { ok: true };
 }
 
-/** Start (or reuse) a conversation with a contact and send the first email. */
+const CONTACT_SELECT =
+  "id, company_id, first_name, last_name, email, phone, title, lifecycle_stage, companies(name)";
+
+/** Escape LIKE wildcards so `ilike` is a case-insensitive *exact* match. */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/**
+ * Resolve the recipient of a compose: an explicitly picked contact, or a raw
+ * address typed into the To field. A typed address that already belongs to a
+ * contact reuses it (so the mail joins that contact's thread rather than
+ * forking a duplicate); a genuinely new one gets a contact created, because a
+ * thread hangs off a contact and an email you sent has to live somewhere.
+ */
+async function resolveRecipient(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  contactId: string,
+  toEmail: string
+): Promise<{ contact?: ContactRow & { id: string; company_id: string | null }; error?: string }> {
+  if (contactId) {
+    const { data } = await supabase
+      .from("contacts")
+      .select(CONTACT_SELECT)
+      .eq("id", contactId)
+      .maybeSingle();
+    if (!data) return { error: "Contact not found." };
+    return { contact: data as unknown as ContactRow & { id: string; company_id: string | null } };
+  }
+
+  const email = toEmail.toLowerCase();
+  if (!EMAIL_RE.test(email)) return { error: "Enter a contact or a valid email address." };
+
+  const { data: match } = await supabase
+    .from("contacts")
+    .select(CONTACT_SELECT)
+    .eq("org_id", orgId)
+    .ilike("email", escapeLike(email))
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (match) {
+    return { contact: match as unknown as ContactRow & { id: string; company_id: string | null } };
+  }
+
+  const { data: created, error } = await supabase
+    .from("contacts")
+    .insert({
+      org_id: orgId,
+      email,
+      lifecycle_stage: "new",
+      owner_id: userId,
+      source: "inbox",
+    })
+    .select(CONTACT_SELECT)
+    .maybeSingle();
+  if (error || !created) {
+    return { error: error?.message || "Could not create a contact for that address." };
+  }
+  return { contact: created as unknown as ContactRow & { id: string; company_id: string | null } };
+}
+
+/**
+ * Send a new email *inside a thread*: if the recipient's conversation already
+ * exists it is reused as-is — its subject is the thread's identity and is never
+ * overwritten by this send — and a closed one reopens. Only a recipient with no
+ * thread yet gets one created, titled with this subject.
+ *
+ * The recipient may be a picked contact or an address typed into the To field;
+ * an unknown address gets a contact so the draft still lands in a real thread
+ * rather than vanishing into a one-off send.
+ */
 export async function composeEmail(
   _prev: ComposeState,
   fd: FormData
 ): Promise<ComposeState> {
   const { supabase, org, userId } = await requireContext();
 
-  const contactId = String(fd.get("contact_id") ?? "").trim();
-  if (!contactId) return { error: "Pick a contact to email." };
+  const pickedId = String(fd.get("contact_id") ?? "").trim();
+  const typedEmail = String(fd.get("to_email") ?? "").trim();
+  if (!pickedId && !typedEmail) return { error: "Add a recipient." };
 
   const subject = String(fd.get("subject") ?? "").trim();
   const bodyHtml = String(fd.get("body") ?? "").trim();
   if (!subject) return { error: "Add a subject." };
   if (!bodyHtml || bodyHtml === "<p></p>") return { error: "Write a message first." };
 
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select(
-      "id, company_id, first_name, last_name, email, phone, title, lifecycle_stage, companies(name)"
-    )
-    .eq("id", contactId)
-    .maybeSingle();
-  if (!contact) return { error: "Contact not found." };
-  const c = contact as unknown as ContactRow & {
-    id: string;
-    company_id: string | null;
-  };
+  const { contact: c, error: recipientError } = await resolveRecipient(
+    supabase,
+    org.id,
+    userId,
+    pickedId,
+    typedEmail
+  );
+  if (recipientError || !c) return { error: recipientError ?? "Contact not found." };
+  const contactId = c.id;
+
   const to = c.email?.trim();
   if (!to) return { error: "This contact has no email address." };
 
-  // Upsert the contact's email conversation (unique per org+contact+channel).
-  const { data: conv, error: convErr } = await supabase
+  const cc = resolveCopyList(String(fd.get("cc") ?? ""), "Cc", [to]);
+  if (cc.error) return { error: cc.error };
+  const bcc = resolveCopyList(String(fd.get("bcc") ?? ""), "Bcc", [
+    to,
+    ...cc.addresses,
+  ]);
+  if (bcc.error) return { error: bcc.error };
+
+  // Find the contact's existing email thread (unique per org+contact+channel)
+  // and send into it; create one only when there is none.
+  const { data: existing } = await supabase
     .from("conversations")
-    .upsert(
-      {
+    .select("id, status")
+    .eq("org_id", org.id)
+    .eq("contact_id", contactId)
+    .eq("channel", "email")
+    .maybeSingle();
+
+  let conversationId: string;
+  if (existing) {
+    const e = existing as { id: string; status: ConversationStatus };
+    conversationId = e.id;
+    if (e.status === "closed") {
+      await supabase
+        .from("conversations")
+        .update({ status: "open" })
+        .eq("id", conversationId);
+    }
+  } else {
+    const { data: conv, error: convErr } = await supabase
+      .from("conversations")
+      .insert({
         org_id: org.id,
         contact_id: contactId,
         company_id: c.company_id ?? null,
         channel: "email",
         subject,
-      },
-      { onConflict: "org_id,contact_id,channel" }
-    )
-    .select("id")
-    .maybeSingle();
-  if (convErr || !conv) {
-    return { error: convErr?.message || "Could not open a conversation." };
+      })
+      .select("id")
+      .maybeSingle();
+    if (convErr || !conv) {
+      return { error: convErr?.message || "Could not open a conversation." };
+    }
+    conversationId = (conv as { id: string }).id;
   }
-
-  const conversationId = (conv as { id: string }).id;
   const error = await deliverEmail({
     supabase,
     orgId: org.id,
@@ -266,6 +425,8 @@ export async function composeEmail(
     conversationId,
     contactId,
     to,
+    cc: cc.addresses,
+    bcc: bcc.addresses,
     merge: mergeFrom(c),
     subject,
     bodyHtml,

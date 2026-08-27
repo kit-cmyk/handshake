@@ -3,6 +3,8 @@ import { Plus, Workflow as WorkflowIcon } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { WorkflowsTable, type WorkflowRow } from "./workflows-table";
 import { TRIGGER_LABELS, type Workflow } from "@/lib/workflows";
 
@@ -39,19 +41,17 @@ export default async function WorkflowsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Workflows</h1>
-          <p className="text-sm text-muted-foreground">
-            Trigger-based automations.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/workflows/new">
-            <Plus className="size-4" /> New workflow
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.workflows.label}
+        description={DESTINATIONS.workflows.description}
+        actions={
+          <Button asChild>
+            <Link href="/workflows/new">
+              <Plus className="size-4" /> New workflow
+            </Link>
+          </Button>
+        }
+      />
 
       {rows.length ? (
         <WorkflowsTable data={rows} />

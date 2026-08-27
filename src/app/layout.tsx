@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
-import { Nunito_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Outfit, Lexend, IBM_Plex_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ThemeProvider, themeScript } from "@/components/theme-provider";
+import { sidebarScript } from "@/lib/sidebar-state";
 import "./globals.css";
 
-// Primary font (Google Sans) is loaded via the Google Fonts stylesheet link
-// in <head> below — it is not distributed through next/font/google.
-const nunitoSans = Nunito_Sans({
+// Outfit (display/headings) + Lexend (body) are both variable fonts, so no
+// weight list — next/font ships the full axis and self-hosts the files, which
+// is why there is no Google Fonts <link> or preconnect in <head> below.
+const outfit = Outfit({
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-nunito-sans",
+  variable: "--font-outfit",
+});
+
+const lexend = Lexend({
+  subsets: ["latin"],
+  variable: "--font-lexend",
 });
 
 const iBMPlexMono = IBM_Plex_Mono({
@@ -34,23 +40,15 @@ export default function RootLayout({
       lang="en"
       className={cn(
         "h-full antialiased",
-        nunitoSans.variable,
+        outfit.variable,
+        lexend.variable,
         iBMPlexMono.variable,
       )}
       suppressHydrationWarning
     >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap"
-          rel="stylesheet"
-        />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: sidebarScript }} />
       </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>

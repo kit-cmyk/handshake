@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createInvite, revokeInvite, type TeamState } from "./team-actions";
+import { statusLabel } from "@/lib/utils";
 
 export type Member = { name: string; email: string; role: string };
 export type Invite = { id: string; email: string; role: string; token: string };
@@ -116,7 +117,7 @@ export function Team({
                 <p className="text-xs text-muted-foreground">{m.email}</p>
               )}
             </div>
-            <Badge variant="secondary">{m.role}</Badge>
+            <Badge variant="secondary">{statusLabel(m.role)}</Badge>
           </li>
         ))}
       </ul>

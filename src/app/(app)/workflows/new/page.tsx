@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { NewWorkflow } from "./new-workflow";
 import type { WorkflowTemplate } from "../templates";
@@ -38,7 +37,13 @@ export default async function NewWorkflowPage({
     { data: workflows },
     { data: mailboxes },
   ] = await Promise.all([
-    supabase.from("segments").select("id, name").eq("org_id", org.id).order("name"),
+    supabase
+      .from("segments")
+      .select("id, name, type")
+      .eq("org_id", org.id)
+      // Campaign-managed audience lists aren't user-pickable segments.
+      .eq("managed", false)
+      .order("name"),
     supabase
       .from("campaigns")
       .select("id, name")
@@ -58,9 +63,9 @@ export default async function NewWorkflowPage({
       .eq("status", "active"),
   ]);
 
-  const segmentOptions = ((segments ?? []) as Pick<Segment, "id" | "name">[]).map(
-    (s) => ({ id: s.id, name: s.name })
-  );
+  const segmentOptions = (
+    (segments ?? []) as Pick<Segment, "id" | "name" | "type">[]
+  ).map((s) => ({ id: s.id, name: s.name, type: s.type }));
   const campaignOptions = ((campaigns ?? []) as { id: string; name: string }[]).map(
     (c) => ({ id: c.id, name: c.name })
   );
@@ -92,18 +97,11 @@ export default async function NewWorkflowPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/workflows"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to workflows
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">New workflow</h1>
-        <p className="text-sm text-muted-foreground">
-          Pick a trigger, then build the automation.
-        </p>
-      </div>
+      <PageHeader
+        back="workflows"
+        title="New workflow"
+        description="Pick a trigger, then build the automation."
+      />
       <NewWorkflow
         segments={segmentOptions}
         campaigns={campaignOptions}

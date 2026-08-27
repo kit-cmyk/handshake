@@ -26,12 +26,14 @@ export function OrgSwitcher({
   const active = orgs.find((o) => o.id === activeId);
   const name = active?.name ?? "Workspace";
 
+  // On the collapsed sidebar rail only the initial tile survives; the name and
+  // the chevron are hidden by the `sidebar-collapsed:` variant.
   const face = (
     <span className="flex min-w-0 items-center gap-2.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-md bg-white/20 text-sm font-bold">
         {name.charAt(0).toUpperCase()}
       </span>
-      <span className="min-w-0 text-left">
+      <span className="min-w-0 text-left sidebar-collapsed:hidden">
         <span className="block text-[10px] font-medium uppercase tracking-wide text-primary-foreground/70">
           Workspace
         </span>
@@ -41,7 +43,11 @@ export function OrgSwitcher({
   );
 
   if (orgs.length <= 1) {
-    return <div className="flex w-full items-center px-2.5 py-2">{face}</div>;
+    return (
+      <div className="flex w-full items-center px-2.5 py-2 sidebar-collapsed:justify-center sidebar-collapsed:p-1">
+        {face}
+      </div>
+    );
   }
 
   return (
@@ -51,10 +57,11 @@ export function OrgSwitcher({
           type="button"
           disabled={pending}
           aria-label="Switch workspace"
-          className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-60"
+          title={`Workspace: ${name}`}
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-60 sidebar-collapsed:justify-center sidebar-collapsed:p-1"
         >
           {face}
-          <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/70" />
+          <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/70 sidebar-collapsed:hidden" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-56">

@@ -175,7 +175,7 @@ export async function searchLeads(
         .eq("id", jobId);
     }
 
-    revalidatePath("/prospect");
+    revalidatePath("/leads");
     return {
       ok: true,
       results: leadResults,
@@ -196,7 +196,7 @@ export async function searchLeads(
         })
         .eq("id", jobId);
     }
-    revalidatePath("/prospect");
+    revalidatePath("/leads");
     return { error: message };
   }
 }
@@ -274,6 +274,10 @@ export async function importLeads(
       lifecycle_stage: "new",
       owner_id: userId,
       source: "google_places",
+      // `source` is the machine tag; `lead_source` is the human-facing field
+      // the Contacts UI shows and the contact form edits. Without it, imported
+      // leads arrive with a blank lead source.
+      lead_source: "Find leads",
     });
     if (!cErr) contacts++;
   }
@@ -288,7 +292,7 @@ export async function importLeads(
   }
 
   revalidatePath("/companies");
-  revalidatePath("/prospect");
+  revalidatePath("/leads");
   if (contacts) revalidatePath("/contacts");
 
   return { ok: true, imported, contacts, skipped };
@@ -424,7 +428,7 @@ export async function searchContacts(
         .eq("id", jobId);
     }
 
-    revalidatePath("/prospect");
+    revalidatePath("/leads");
     return { ok: true, results: leadResults, jobId };
   } catch (e) {
     const message = (e as Error).message;
@@ -438,7 +442,7 @@ export async function searchContacts(
         })
         .eq("id", jobId);
     }
-    revalidatePath("/prospect");
+    revalidatePath("/leads");
     return { error: message };
   }
 }
@@ -524,7 +528,7 @@ export async function importContacts(
   }
 
   revalidatePath("/contacts");
-  revalidatePath("/prospect");
+  revalidatePath("/leads");
 
   return { ok: true, imported, linked, skipped };
 }

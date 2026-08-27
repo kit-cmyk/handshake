@@ -9,29 +9,27 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { ArrowLeft, Pencil, Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { SegmentSheet } from "../segment-sheet";
-import { RefreshButton, DeleteSegmentButton } from "./segment-actions";
+import { SegmentActions, RefreshButton } from "./segment-actions";
+import { SegmentMembers, type MemberRow } from "./segment-members";
 import {
-  evaluateFilter,
   parseDefinition,
-  fieldDef,
-  OPERATOR_LABELS,
-  VALUELESS_OPS,
-  EVALUABLE_SELECT,
-  type EvaluableContact,
-  type Rule,
+  describeRule,
+  fetchAllEvaluable,
+  fetchSegmentMemberIds,
   type Segment,
 } from "@/lib/segments";
+import { statusLabel } from "@/lib/utils";
 
-/** Human-readable one-liner for a single filter rule. */
-function ruleText(rule: Rule): string {
-  const field = fieldDef(rule.field)?.label ?? rule.field;
-  const op = OPERATOR_LABELS[rule.op] ?? rule.op;
-  const value = VALUELESS_OPS.includes(rule.op) ? "" : ` ${rule.value ?? ""}`;
-  return `${field} ${op}${value}`.trim();
-}
+/**
+ * How many members the page renders inline. The full list is browsable on
+ * Contacts — shipping every row of a 50k-member segment to the browser to
+ * render a scroll box nobody reads is not worth the payload.
+ */
+const MEMBER_PAGE = 200;
 
 export default async function SegmentDetailPage({
   params,
@@ -45,62 +43,72 @@ export default async function SegmentDetailPage({
     .from("segments")
     .select("*")
     .eq("id", id)
-    .single();
-  if (!segment) notFound();
+    .eq("org_id", org.id)
+    .maybeSingle();
+  // A campaign-managed audience list has no standalone page — it's edited from
+  // the campaign that owns it.
+  if (!segment || (segment as Segment).managed) notFound();
 
   const seg = segment as Segment;
   const def = parseDefinition(seg.definition);
 
-  // Member count only — the people themselves are browsed on the Contacts page.
-  let memberCount = 0;
-  if (seg.type === "static") {
-    const { count } = await supabase
-      .from("segment_members")
-      .select("id", { count: "exact", head: true })
-      .eq("segment_id", id);
-    memberCount = count ?? 0;
-  } else {
-    const { data } = await supabase
-      .from("contacts")
-      .select(EVALUABLE_SELECT)
-      .eq("org_id", org.id);
-    memberCount = evaluateFilter(
-      (data ?? []) as unknown as EvaluableContact[],
-      def
-    ).length;
-  }
+  // Both reads page past the 1000-row cap. A truncated read here would
+  // under-report the member count the whole page is built around.
+  const [memberIds, contacts] = await Promise.all([
+    fetchSegmentMemberIds(supabase, org.id, seg),
+    fetchAllEvaluable(supabase, org.id),
+  ]);
+  const byId = new Map(contacts.map((c) => [c.id, c]));
+
+  const members: MemberRow[] = memberIds
+    .slice(0, MEMBER_PAGE)
+    .flatMap((cid) => {
+      const c = byId.get(cid);
+      if (!c) return [];
+      return [
+        {
+          id: c.id,
+          name:
+            [c.first_name, c.last_name].filter(Boolean).join(" ") ||
+            c.email ||
+            "Unnamed contact",
+          email: c.email,
+          company: c.companies?.name ?? null,
+          stage: c.lifecycle_stage,
+        },
+      ];
+    });
+
+  const memberCount = memberIds.length;
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/segments"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to segments
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{seg.name}</h1>
+      <PageHeader
+        back="segments"
+        title={seg.name}
+        badge={
           <Badge variant={seg.type === "dynamic" ? "default" : "secondary"}>
-            {seg.type}
+            {statusLabel(seg.type)}
           </Badge>
-        </div>
-        <div className="flex gap-2">
-          <SegmentSheet
-            segment={seg}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          {seg.type === "static" && def.rules.length > 0 && (
-            <RefreshButton id={seg.id} />
-          )}
-          <DeleteSegmentButton id={seg.id} />
-        </div>
-      </div>
+        }
+        actions={
+          <>
+            <SegmentSheet
+              segment={seg}
+              memberCount={memberCount}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            {seg.type === "static" && def.rules.length > 0 && (
+              <RefreshButton id={seg.id} />
+            )}
+            <SegmentActions id={seg.id} name={seg.name} />
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -110,37 +118,57 @@ export default async function SegmentDetailPage({
           <CardDescription>
             {seg.type === "dynamic"
               ? "Computed live from the filter below."
-              : seg.last_evaluated_at
-                ? `Snapshot from ${new Date(seg.last_evaluated_at).toLocaleString()}`
-                : "Static list"}
+              : def.rules.length > 0
+                ? seg.last_evaluated_at
+                  ? `Snapshot from ${new Date(seg.last_evaluated_at).toLocaleString()}`
+                  : "Snapshot not taken yet"
+                : "A fixed list — these people stay in until you take them out."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {seg.type === "dynamic" &&
-            (def.rules.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Contacts match {def.match} of:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {def.rules.map((r, i) => (
-                    <Badge key={i} variant="secondary">
-                      {ruleText(r)}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ) : (
+          {def.rules.length > 0 ? (
+            <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                No filter conditions — this segment includes every contact.
+                Contacts match {def.match} of:
               </p>
-            ))}
+              <div className="flex flex-wrap gap-2">
+                {def.rules.map((r, i) => (
+                  <Badge key={i} variant="secondary">
+                    {describeRule(r)}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : seg.type === "dynamic" ? (
+            <p className="text-sm text-muted-foreground">
+              No filter conditions — this segment includes every contact.
+            </p>
+          ) : null}
 
-          <Button asChild>
+          <Button asChild variant="outline">
             <Link href={`/contacts?segment=${seg.id}`}>
-              <Users className="size-4" /> View contacts
+              <Users className="size-4" /> View in Contacts
             </Link>
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Members</CardTitle>
+          <CardDescription>
+            {seg.type === "dynamic"
+              ? "Membership follows the filter — edit the conditions to change who's here."
+              : "Add or remove people directly. Removing someone here doesn't delete the contact."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SegmentMembers
+            segmentId={seg.id}
+            segmentType={seg.type}
+            members={members}
+            total={memberCount}
+          />
         </CardContent>
       </Card>
     </div>

@@ -1,19 +1,9 @@
 import Link from "next/link";
-import {
-  Users,
-  Building2,
-  Handshake,
-  Send,
-  ArrowUpRight,
-  Search,
-  ListFilter,
-  UploadCloud,
-  BarChart3,
-  Plus,
-} from "lucide-react";
+import { Handshake, ArrowUpRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org";
 import { Card } from "@/components/ui/card";
+import { DESTINATIONS, type NavKey } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 async function count(
@@ -31,93 +21,96 @@ async function count(
   return count ?? 0;
 }
 
-const STATS = [
+const STATS: {
+  key: string;
+  to: NavKey;
+  label: string;
+  hint: string;
+  ring: string;
+  chip: string;
+  glow: string;
+}[] = [
   {
     key: "contacts",
+    to: "contacts",
     label: "Contacts",
     hint: "People in your pipeline",
-    href: "/contacts",
-    icon: Users,
     ring: "ring-sky-500/20",
     chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
     glow: "from-sky-500/20",
   },
   {
     key: "companies",
+    to: "companies",
     label: "Companies",
     hint: "Accounts you're targeting",
-    href: "/companies",
-    icon: Building2,
     ring: "ring-violet-500/20",
     chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
     glow: "from-violet-500/20",
   },
   {
     key: "deals",
+    to: "pipeline",
     label: "Open Deals",
     hint: "Opportunities in motion",
-    href: "/pipeline",
-    icon: Handshake,
     ring: "ring-emerald-500/20",
     chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
     glow: "from-emerald-500/20",
   },
   {
     key: "campaigns",
+    to: "campaigns",
     label: "Campaigns",
     hint: "Outreach sequences",
-    href: "/campaigns",
-    icon: Send,
     ring: "ring-amber-500/20",
     chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
     glow: "from-amber-500/20",
   },
-] as const;
+];
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS: {
+  to: NavKey;
+  label: string;
+  desc: string;
+  chip: string;
+}[] = [
   {
-    label: "Add a contact",
-    desc: "Drop a new person into the pipeline",
-    href: "/contacts",
-    icon: Plus,
-    chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  },
-  {
+    to: "leads",
     label: "Find leads",
-    desc: "Scrape local businesses into your CRM",
-    href: "/prospect",
-    icon: Search,
+    desc: "Search businesses and people into your CRM",
     chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
   },
   {
+    to: "contacts",
+    label: "Add a contact",
+    desc: "Drop a new person into the pipeline",
+    chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  },
+  {
+    to: "campaigns",
     label: "Launch a campaign",
     desc: "Build a multi-step outreach sequence",
-    href: "/campaigns",
-    icon: Send,
     chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   },
   {
+    to: "segments",
     label: "Build a segment",
     desc: "Group contacts to target your outreach",
-    href: "/segments",
-    icon: ListFilter,
     chip: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
   },
   {
+    to: "import",
     label: "Import a CSV",
     desc: "Bring an existing list on board",
-    href: "/import",
-    icon: UploadCloud,
     chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   },
   {
+    to: "reports",
     label: "See reports",
     desc: "Track opens, clicks, and replies",
-    href: "/reports",
-    icon: BarChart3,
     chip: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
   },
-] as const;
+];
 
 export default async function DashboardPage() {
   const org = await getActiveOrg();
@@ -142,7 +135,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary to-primary/70 p-6 text-primary-foreground shadow-lg shadow-primary/20 sm:p-8">
-        <div className="animate-hs-float pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-12 right-24 size-32 rounded-full bg-white/5 blur-2xl" />
         <div className="relative flex items-center gap-3">
           <span className="animate-hs-wave grid size-11 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
@@ -161,11 +154,13 @@ export default async function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {STATS.map((s) => (
-          <Link key={s.key} href={s.href} className="group">
+        {STATS.map((s) => {
+          const { href, icon: Icon } = DESTINATIONS[s.to];
+          return (
+          <Link key={s.key} href={href} className="group">
             <Card
               className={cn(
-                "relative h-full overflow-hidden ring-1 ring-inset transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md",
+                "relative h-full overflow-hidden ring-1 ring-inset transition-all duration-200 group-hover:shadow-md",
                 s.ring,
               )}
             >
@@ -183,7 +178,7 @@ export default async function DashboardPage() {
                       s.chip,
                     )}
                   >
-                    <s.icon className="size-5" />
+                    <Icon className="size-5" />
                   </span>
                   <ArrowUpRight className="size-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
                 </div>
@@ -197,7 +192,8 @@ export default async function DashboardPage() {
               </div>
             </Card>
           </Link>
-        ))}
+          );
+        })}
       </div>
 
       {/* Quick actions */}
@@ -209,16 +205,18 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {QUICK_ACTIONS.map((a) => (
-            <Link key={a.href + a.label} href={a.href} className="group">
-              <Card className="flex h-full items-center gap-4 p-4 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md">
+          {QUICK_ACTIONS.map((a) => {
+            const { href, icon: Icon } = DESTINATIONS[a.to];
+            return (
+            <Link key={a.to + a.label} href={href} className="group">
+              <Card className="flex h-full items-center gap-4 p-4 transition-all duration-200 group-hover:border-primary/30 group-hover:shadow-md">
                 <span
                   className={cn(
                     "grid size-10 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-105",
                     a.chip,
                   )}
                 >
-                  <a.icon className="size-5" />
+                  <Icon className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium leading-tight">{a.label}</p>
@@ -229,7 +227,8 @@ export default async function DashboardPage() {
                 <ArrowUpRight className="size-4 shrink-0 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary lg:hidden" />
               </Card>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

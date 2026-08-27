@@ -1,33 +1,28 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  Pencil,
-  Building2,
-  Mail,
-  Phone,
-  Briefcase,
-  MapPin,
-  Radio,
-  CalendarClock,
-  CalendarPlus,
-} from "lucide-react";
+import { Pencil } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardDescription,
-} from "@/components/ui/card";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { ContactDialog } from "../contact-dialog";
-import { ActivityComposer } from "./activity-composer";
-import { ActivityItem } from "./activity-item";
 import { DeleteContactButton } from "./delete-contact-button";
-import { contactName, formatAddress, type Activity, type Contact } from "@/lib/types";
+import { getContactProfile } from "../actions";
+import {
+  UnsubscribeNotice,
+  DetailsPanel,
+  RelationshipPanels,
+  ActivityPanel,
+} from "../contact-panels";
+import { contactName } from "@/lib/types";
 
+/**
+ * Full contact record.
+ *
+ * Reads the same `getContactProfile` payload the side sheet uses and renders
+ * the same panels, so the two views cannot drift apart again — this page used
+ * to show only details and activity, which made the sheet's "Full page" link
+ * lead somewhere strictly less informative than where it started.
+ */
 export default async function ContactDetailPage({
   params,
 }: {
@@ -36,21 +31,11 @@ export default async function ContactDetailPage({
   const { id } = await params;
   const { supabase, org } = await requireContext();
 
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select("*, companies(id, name)")
-    .eq("id", id)
-    .single();
+  const profile = await getContactProfile(id);
+  if (!profile) notFound();
 
-  if (!contact) notFound();
-
-  const [{ data: activities }, { data: companies }, { data: sources }] =
+  const [{ data: companies }, { data: sources }, { data: members }] =
     await Promise.all([
-      supabase
-        .from("activities")
-        .select("*")
-        .eq("contact_id", id)
-        .order("created_at", { ascending: false }),
       supabase
         .from("companies")
         .select("id, name")
@@ -61,9 +46,13 @@ export default async function ContactDetailPage({
         .select("lead_source")
         .eq("org_id", org.id)
         .not("lead_source", "is", null),
+      supabase
+        .from("memberships")
+        .select("user_id, profiles(full_name, email)")
+        .eq("org_id", org.id),
     ]);
 
-  const c = contact as Contact & { companies: { id: string; name: string } | null };
+  const c = profile.contact;
   const companyOptions = (companies ?? []) as { id: string; name: string }[];
   const leadSources = [
     ...new Set(
@@ -73,98 +62,60 @@ export default async function ContactDetailPage({
     ),
   ].sort((a, b) => a.localeCompare(b));
 
-  const fmtDate = (v: string | null) => {
-    if (!v) return null;
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString();
-  };
-
-  const fields = [
-    { icon: Mail, label: "Email", value: c.email },
-    { icon: Phone, label: "Phone", value: c.phone },
-    { icon: Briefcase, label: "Title", value: c.title },
-    { icon: Building2, label: "Company", value: c.companies?.name },
-    { icon: Radio, label: "Lead source", value: c.lead_source },
-    { icon: MapPin, label: "Address", value: formatAddress(c) || null },
-    { icon: CalendarClock, label: "Appointment", value: fmtDate(c.appointment_date) },
-    { icon: CalendarPlus, label: "Date added", value: fmtDate(c.created_at) },
-  ].filter((f) => f.value);
+  const ownerOptions = (members ?? []).map((m) => {
+    const row = m as unknown as {
+      user_id: string;
+      profiles:
+        | { full_name: string | null; email: string | null }
+        | { full_name: string | null; email: string | null }[]
+        | null;
+    };
+    const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    return {
+      id: row.user_id,
+      name: p?.full_name?.trim() || p?.email || "Unknown member",
+    };
+  });
+  ownerOptions.sort((a, b) => a.name.localeCompare(b.name));
+  const ownerName = c.owner_id
+    ? (ownerOptions.find((o) => o.id === c.owner_id)?.name ?? null)
+    : null;
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/contacts"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to contacts
-      </Link>
+      <PageHeader
+        back="contacts"
+        title={contactName(c)}
+        badge={<LifecycleBadge stage={c.lifecycle_stage} />}
+        actions={
+          <>
+            <ContactDialog
+              companies={companyOptions}
+              contact={c}
+              leadSources={leadSources}
+              owners={ownerOptions}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            <DeleteContactButton id={c.id} />
+          </>
+        }
+      />
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {contactName(c)}
-          </h1>
-          <LifecycleBadge stage={c.lifecycle_stage} />
+      {c.unsubscribed_at && <UnsubscribeNotice at={c.unsubscribed_at} />}
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-1">
+          <DetailsPanel profile={profile} ownerName={ownerName} />
+          <RelationshipPanels profile={profile} />
         </div>
-        <div className="flex gap-2">
-          <ContactDialog
-            companies={companyOptions}
-            contact={c}
-            leadSources={leadSources}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          <DeleteContactButton id={c.id} />
+
+        <div className="lg:col-span-2">
+          <ActivityPanel contactId={c.id} profile={profile} />
         </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-base">Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {fields.length ? (
-              fields.map((f) => (
-                <div key={f.label} className="flex items-center gap-2">
-                  <f.icon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="w-24 shrink-0 text-muted-foreground">
-                    {f.label}
-                  </span>
-                  <span className="flex-1">{f.value}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-muted-foreground">No details yet.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Activity</CardTitle>
-            <CardDescription>
-              Log notes, calls, tasks, and emails.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ActivityComposer contactId={c.id} />
-            <ul className="divide-y">
-              {(activities ?? []).length ? (
-                (activities as Activity[]).map((a) => (
-                  <ActivityItem key={a.id} activity={a} />
-                ))
-              ) : (
-                <li className="py-6 text-center text-sm text-muted-foreground">
-                  No activity yet.
-                </li>
-              )}
-            </ul>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

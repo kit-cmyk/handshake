@@ -1,5 +1,7 @@
 import { requireContext } from "@/lib/context";
 import { CampaignReportTable } from "../reports-tables";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { ReportsNav } from "../reports-nav";
 import { computeFunnel, pct, type EventLite } from "@/lib/funnel";
 import type { Campaign } from "@/lib/types";
@@ -52,12 +54,10 @@ export default async function CampaignReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Campaign funnel performance across your outreach.
-        </p>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.reports.label}
+        description="Campaign funnel performance across your outreach."
+      />
 
       <ReportsNav />
 

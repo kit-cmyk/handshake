@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
+import {
+  FieldError,
+  fieldErrorProps,
+  errorFor,
+} from "@/components/ui/field-error";
 import { SheetFooter } from "@/components/ui/sheet";
 import {
   Select,
@@ -26,6 +31,7 @@ import {
 import { COUNTRIES } from "@/lib/countries";
 
 type CompanyOption = { id: string; name: string };
+type OwnerOption = { id: string; name: string };
 
 const NONE = "none";
 
@@ -37,12 +43,15 @@ export function ContactForm({
   contact,
   companies,
   leadSources = [],
+  owners = [],
   onSuccess,
   onCancel,
 }: {
   contact?: Contact;
   companies: CompanyOption[];
   leadSources?: string[];
+  /** Org members who can own a contact. Empty hides the picker. */
+  owners?: OwnerOption[];
   /** Fired after a successful save (router.refresh already ran). */
   onSuccess?: () => void;
   /** When provided, renders a Cancel button. */
@@ -63,6 +72,9 @@ export function ContactForm({
     contact?.lead_source ?? ""
   );
   const [country, setCountry] = React.useState<string>(contact?.country ?? "");
+  const [ownerId, setOwnerId] = React.useState<string>(
+    contact?.owner_id ?? NONE
+  );
 
   React.useEffect(() => {
     if (state.ok) {
@@ -82,6 +94,13 @@ export function ContactForm({
       <input type="hidden" name="lifecycle_stage" value={stage} />
       <input type="hidden" name="lead_source" value={leadSource} />
       <input type="hidden" name="country" value={country} />
+      {owners.length > 0 && (
+        <input
+          type="hidden"
+          name="owner_id"
+          value={ownerId === NONE ? "" : ownerId}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -90,7 +109,11 @@ export function ContactForm({
             id="first_name"
             name="first_name"
             defaultValue={contact?.first_name ?? ""}
+            {...fieldErrorProps("first_name", !!errorFor(state, "first_name", "first_name"))}
           />
+          <FieldError id="first_name">
+            {errorFor(state, "first_name", "first_name")}
+          </FieldError>
         </div>
         <div className="space-y-2">
           <Label htmlFor="last_name">Last name</Label>
@@ -109,7 +132,9 @@ export function ContactForm({
           name="email"
           type="email"
           defaultValue={contact?.email ?? ""}
+          {...fieldErrorProps("email", !!errorFor(state, "email"))}
         />
+        <FieldError id="email">{errorFor(state, "email")}</FieldError>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -126,7 +151,9 @@ export function ContactForm({
       <div className="space-y-2">
         <Label>Company</Label>
         <Select value={companyId} onValueChange={setCompanyId}>
-          <SelectTrigger>
+          <SelectTrigger
+            {...fieldErrorProps("company_id", !!errorFor(state, "company_id"))}
+          >
             <SelectValue placeholder="No company" />
           </SelectTrigger>
           <SelectContent>
@@ -138,6 +165,7 @@ export function ContactForm({
             ))}
           </SelectContent>
         </Select>
+        <FieldError id="company_id">{errorFor(state, "company_id")}</FieldError>
       </div>
 
       <div className="space-y-2">
@@ -155,6 +183,26 @@ export function ContactForm({
           </SelectContent>
         </Select>
       </div>
+
+      {owners.length > 0 && (
+        <div className="space-y-2">
+          <Label>Owner</Label>
+          <Select value={ownerId} onValueChange={setOwnerId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Unassigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Unassigned</SelectItem>
+              {owners.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldError id="owner_id">{errorFor(state, "owner_id")}</FieldError>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="lead_source">Lead source</Label>
@@ -225,8 +273,6 @@ export function ContactForm({
           />
         </div>
       )}
-
-      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <SheetFooter>
         {onCancel && (

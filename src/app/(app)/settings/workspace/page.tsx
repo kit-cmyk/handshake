@@ -34,7 +34,7 @@ export default async function WorkspaceSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Workspace</CardTitle>
           <CardDescription>
-            Your organization&apos;s name and the booking link used in emails.
+            Your organization&apos;s name and the fallback booking link for members who haven&apos;t set their own.
           </CardDescription>
         </CardHeader>
         <CardContent>

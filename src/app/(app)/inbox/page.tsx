@@ -1,6 +1,9 @@
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { requireContext } from "@/lib/context";
 import { resolveAvatar } from "@/lib/avatar";
 import { buildTimeline, TIMELINE_EVENT_TYPES } from "@/lib/inbox/timeline";
+import { loadEmailSnippets } from "@/lib/templates/queries";
 import {
   contactName,
   type Activity,
@@ -16,7 +19,11 @@ import {
   type PersonMap,
 } from "./conversation-list";
 import { ConversationPane } from "./conversation-pane";
-import { ComposeEmail, type ComposeContact } from "./compose";
+import {
+  ComposeThread,
+  NewEmailButton,
+  type ComposeContact,
+} from "./compose";
 import { InboxFilters, type InboxTab, type InboxFilter } from "./inbox-filters";
 
 type ConvJoin = Conversation & {
@@ -44,6 +51,7 @@ export default async function InboxPage({
     c?: string;
     filter?: string;
     q?: string;
+    compose?: string;
   }>;
 }) {
   const { supabase, org, userId } = await requireContext();
@@ -55,6 +63,19 @@ export default async function InboxPage({
       : "all"
   ) as InboxFilter;
   const q = (sp.q ?? "").trim().toLowerCase();
+  // Composing takes over the thread pane (Zendesk-style) rather than opening a
+  // slide-over, so a draft reads as the thread it is about to become.
+  const composing = sp.compose === "1";
+
+  // Preserve tab/filter/search when entering and leaving the draft.
+  const listParams = new URLSearchParams();
+  if (sp.tab) listParams.set("tab", sp.tab);
+  if (sp.filter) listParams.set("filter", sp.filter);
+  if (sp.q) listParams.set("q", sp.q);
+  const listHref = `/inbox${listParams.size ? `?${listParams}` : ""}`;
+  const composeParams = new URLSearchParams(listParams);
+  composeParams.set("compose", "1");
+  const composeHref = `/inbox?${composeParams}`;
 
   const [
     { data: convData, error: convError },
@@ -62,6 +83,7 @@ export default async function InboxPage({
     { data: profiles },
     { data: dealData },
     { data: contactData },
+    emailTemplates,
   ] = await Promise.all([
     supabase
       .from("conversations")
@@ -85,6 +107,9 @@ export default async function InboxPage({
       .eq("org_id", org.id)
       .not("email", "is", null)
       .order("first_name", { ascending: true }),
+    // Same library the campaign editor offers, so a one-off reply can reach for
+    // an approved template instead of being written from scratch.
+    loadEmailSnippets(supabase, org.id),
   ]);
 
   // Pick each contact's primary deal: open first, then highest value, then most
@@ -116,6 +141,18 @@ export default async function InboxPage({
     });
   }
 
+  // A contact has at most one email thread; compose sends into it rather than
+  // starting a parallel conversation, so the picker needs to know it exists.
+  const threadByContact = new Map<string, ComposeContact["thread"]>();
+  for (const cv of (convData ?? []) as ConvJoin[]) {
+    if (cv.channel !== "email") continue;
+    threadByContact.set(cv.contact_id, {
+      id: cv.id,
+      subject: cv.subject,
+      closed: cv.status === "closed",
+    });
+  }
+
   const composeContacts: ComposeContact[] = (
     (contactData ?? []) as unknown as {
       id: string;
@@ -129,6 +166,7 @@ export default async function InboxPage({
     name: contactName(c),
     email: c.email ?? "",
     company: c.companies?.name ?? null,
+    thread: threadByContact.get(c.id) ?? null,
   }));
 
   // Migration 0020 not applied yet — degrade to a clear, non-crashing message.
@@ -171,6 +209,7 @@ export default async function InboxPage({
       contactEmail: cv.contacts?.email ?? null,
       companyId: cv.company_id,
       companyName: cv.companies?.name ?? null,
+      subject: cv.subject,
       status: cv.status,
       assigneeId: cv.assignee_id,
       lastMessageAt: cv.last_message_at,
@@ -197,8 +236,10 @@ export default async function InboxPage({
     return true;
   });
 
-  const selectedId =
-    (sp.c && rows.some((r) => r.id === sp.c) ? sp.c : rows[0]?.id) ?? null;
+  // While composing nothing is selected — the pane belongs to the draft.
+  const selectedId = composing
+    ? null
+    : ((sp.c && rows.some((r) => r.id === sp.c) ? sp.c : rows[0]?.id) ?? null);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   // Load the selected conversation's unified timeline.
@@ -238,12 +279,10 @@ export default async function InboxPage({
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
-        <p className="text-sm text-muted-foreground">
-          Every conversation, activity, and pipeline move — in one place.
-        </p>
-      </div>
+      <PageHeader
+        title={DESTINATIONS.inbox.label}
+        description={DESTINATIONS.inbox.description}
+      />
 
       {needsMigration ? (
         <div className="flex flex-1 items-center justify-center rounded-lg border bg-card">
@@ -261,7 +300,7 @@ export default async function InboxPage({
           <div className="flex min-h-0 flex-col border-r">
             <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
               <span className="text-sm font-semibold">Conversations</span>
-              <ComposeEmail contacts={composeContacts} />
+              <NewEmailButton href={composeHref} />
             </div>
             <InboxFilters tab={tab} filter={filter} q={sp.q ?? ""} />
             <ConversationList
@@ -271,12 +310,21 @@ export default async function InboxPage({
               people={people}
             />
           </div>
-          <ConversationPane
-            conversation={selected}
-            timeline={timeline}
-            people={people}
-            currentUserId={userId}
-          />
+          {composing ? (
+            <ComposeThread
+              contacts={composeContacts}
+              templates={emailTemplates}
+              cancelHref={listHref}
+            />
+          ) : (
+            <ConversationPane
+              conversation={selected}
+              timeline={timeline}
+              people={people}
+              currentUserId={userId}
+              templates={emailTemplates}
+            />
+          )}
         </div>
       )}
     </div>

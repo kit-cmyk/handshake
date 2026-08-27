@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
-  ArrowUpRight,
-  TrendingUp,
+  ArrowRight,
   Sparkles,
   Layers,
   Gauge,
@@ -10,12 +9,18 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { LandingNav } from "@/components/landing/landing-nav";
-import { FeatureTabs } from "@/components/landing/feature-tabs";
+import { LandingHero } from "@/components/landing/landing-hero";
+import { FeatureBento } from "@/components/landing/feature-bento";
+import { LeadFinder } from "@/components/landing/lead-finder";
+import { Integrations } from "@/components/landing/integrations";
 import { SmoothScroll } from "@/components/landing/smooth-scroll";
 import { NoiseBackground } from "@/components/landing/noise-background";
+import { LandingGround } from "@/components/landing/landing-ground";
+import { WordsPullUpMultiStyle } from "@/components/ui/words-pull-up";
 import TextAnimation from "@/components/ui/scroll-text";
 
 const CAPABILITIES = [
+  "Lead Finder",
   "Lead Management",
   "Email Campaigns",
   "Deal Pipeline",
@@ -47,7 +52,39 @@ const VALUES = [
   },
 ];
 
-const LOGOS = ["Northwind", "Acme Co", "Lumen", "Patex", "Consbit", "Todobit"];
+/**
+ * Small numbered eyebrow that opens each section — the print-spread device that
+ * ties the page together underneath the hero panel.
+ */
+function SectionLabel({
+  index,
+  children,
+  tone = "default",
+}: {
+  index: string;
+  children: React.ReactNode;
+  tone?: "default" | "cream";
+}) {
+  return (
+    <p
+      className={
+        tone === "cream"
+          ? "flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-landing-cream/45"
+          : "flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground"
+      }
+    >
+      <span className="tabular-nums">{index}</span>
+      <span
+        className={
+          tone === "cream"
+            ? "h-px w-8 bg-landing-cream/25"
+            : "h-px w-8 bg-border"
+        }
+      />
+      {children}
+    </p>
+  );
+}
 
 export default async function Home() {
   const supabase = await createClient();
@@ -55,240 +92,251 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const ctaHref = user ? "/dashboard" : "/signup";
+  const ctaLabel = user ? "Go to dashboard" : "Get started free";
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background font-sans text-foreground">
+    <div className="landing-ground relative min-h-screen overflow-hidden bg-background font-sans text-foreground">
       <SmoothScroll />
       <NoiseBackground />
 
-      <LandingNav authed={!!user} />
+      <LandingNav authed={!!user} variant="tab" />
 
-      <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
-        {/* Hero */}
-        <section className="pt-36 text-center sm:pt-44">
-          <span className="inline-flex items-center gap-2 rounded-full border bg-card/70 px-4 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            The CRM your team will actually use
-          </span>
+      <LandingHero authed={!!user} />
 
-          <h1 className="mx-auto mt-6 max-w-4xl text-5xl font-extrabold leading-[0.95] tracking-tight sm:text-6xl lg:text-7xl">
-            Close more deals,
-            <br className="hidden sm:block" /> in less time
-            <TrendingUp
-              className="ml-2 inline size-9 align-middle text-primary sm:size-12 lg:size-14"
-              strokeWidth={2.5}
+      {/* Wrapper exists so <LandingGround> can anchor to the hero's bottom
+          edge rather than guessing at a viewport height. */}
+      <div className="relative">
+        <LandingGround />
+
+        <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
+          {/* What you get — bento of product cards */}
+          <section id="features" className="mt-16 scroll-mt-28 sm:mt-24">
+            <SectionLabel index="01">What you get</SectionLabel>
+
+            <div className="mt-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+              <h2 className="max-w-lg font-heading text-4xl font-medium leading-[0.92] tracking-[-0.05em] sm:text-5xl">
+                Everything included
+              </h2>
+              <div className="flex flex-wrap gap-2 sm:max-w-md sm:justify-end">
+                {CAPABILITIES.map((c) => (
+                  <span
+                    key={c}
+                    className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-10">
+              <FeatureBento />
+            </div>
+
+            {/* Testimonial, kept as a slim full-width strip so the bento above
+                stays all product and the quote still gets its own moment. */}
+            <figure className="mt-4 flex flex-col gap-6 rounded-3xl border bg-card p-7 shadow-sm sm:flex-row sm:items-center sm:gap-10 sm:p-9">
+              <Quote className="size-8 shrink-0 text-primary" />
+              <blockquote className="flex-1 font-heading text-xl font-medium leading-[1.2] tracking-[-0.02em] text-foreground sm:text-2xl">
+                &ldquo;We switched on a Friday and the team was fully running by
+                Monday. It just made sense.&rdquo;
+              </blockquote>
+              <figcaption className="flex shrink-0 items-center gap-3">
+                <div className="grid size-9 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  MR
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold">Maya Rivera</div>
+                  <div className="text-muted-foreground">Head of Sales, Lumen</div>
+                </div>
+              </figcaption>
+            </figure>
+          </section>
+
+
+          {/* Why choose us */}
+          <section id="why" className="mt-24 scroll-mt-28 sm:mt-32">
+            <div className="relative overflow-hidden rounded-3xl bg-landing-ink p-8 text-landing-cream sm:rounded-[2rem] sm:p-12 lg:p-16">
+              <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.35] mix-blend-overlay" />
+              {/* Brand glow, kept low so the cream type stays the brightest thing. */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-60"
+                aria-hidden
+                style={{
+                  background:
+                    "radial-gradient(70% 60% at 85% 0%, #3b5be0 0%, transparent 60%)",
+                }}
+              />
+
+              <div className="relative">
+                <SectionLabel index="02" tone="cream">
+                  Why Handshake
+                </SectionLabel>
+
+                <h2 className="mt-8 max-w-3xl font-heading text-4xl font-medium leading-[0.92] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
+                  <WordsPullUpMultiStyle
+                    segments={[
+                      { text: "Why teams choose Handshake as their" },
+                      { text: "home base", className: "text-landing-cream/45" },
+                    ]}
+                  />
+                </h2>
+
+                <div className="mt-14 grid gap-x-10 gap-y-10 sm:grid-cols-2">
+                  {VALUES.map((v) => (
+                    <div key={v.title} className="flex gap-4">
+                      <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-landing-cream text-landing-ink">
+                        <v.icon className="size-5" strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <h3 className="font-heading text-lg font-medium tracking-[-0.02em]">
+                          {v.title}
+                        </h3>
+                        <p className="mt-2 text-sm leading-relaxed text-landing-cream/60">
+                          {v.body}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Scroll-reveal statement */}
+          <section className="py-28 text-center sm:py-40">
+            {/* `TextAnimation` renders an h1 by default; the hero wordmark owns
+                the page's only h1, so this statement is a heading below it. */}
+            <TextAnimation
+              as="h2"
+              text="Turn conversations into closed deals."
+              variants={{
+                hidden: { filter: "blur(10px)", opacity: 0, y: 20 },
+                visible: {
+                  filter: "blur(0px)",
+                  opacity: 1,
+                  y: 0,
+                  transition: { ease: "linear" },
+                },
+              }}
+              classname="mx-auto max-w-4xl font-heading text-5xl font-medium leading-[0.9] tracking-[-0.055em] text-foreground sm:text-7xl"
             />
-          </h1>
+            <TextAnimation
+              as="p"
+              letterAnime
+              text="built for teams who move fast"
+              variants={{
+                hidden: { filter: "blur(4px)", opacity: 0, y: 20 },
+                visible: {
+                  filter: "blur(0px)",
+                  opacity: 1,
+                  y: 0,
+                  transition: { duration: 0.2 },
+                },
+              }}
+              classname="mx-auto mt-8 max-w-md text-2xl font-medium lowercase text-muted-foreground sm:text-3xl"
+            />
+          </section>
 
-          <p className="mx-auto mt-6 max-w-xl text-base text-muted-foreground sm:text-lg">
-            Handshake brings your contacts, campaigns, and pipeline into one
-            fast, friendly workspace — so your team can spend less time on
-            admin and more time winning.
-          </p>
-
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href={user ? "/dashboard" : "/signup"}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90"
-            >
-              {user ? "Go to dashboard" : "Start free"}
-              <ArrowUpRight className="size-4" strokeWidth={2.5} />
-            </Link>
-            <a
-              href="#product"
-              className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-7 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-card"
-            >
-              See how it works
-            </a>
-          </div>
-        </section>
-
-        {/* Cards row */}
-        <section className="mt-16 grid gap-4 sm:mt-20 md:grid-cols-3">
-          {/* Capabilities */}
-          <div className="rounded-3xl border bg-card p-6 shadow-sm">
-            <h2 className="text-lg font-bold tracking-tight">
-              Everything included
-            </h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {CAPABILITIES.map((c) => (
-                <span
-                  key={c}
-                  className="rounded-full border bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
-                >
-                  {c}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="flex flex-col gap-4 rounded-3xl bg-primary p-6 text-primary-foreground">
-            <div>
-              <div className="text-4xl font-extrabold tracking-tight">40%</div>
-              <p className="mt-1 text-sm text-primary-foreground/70">
-                more deals closed by teams in their first quarter on Handshake.
+          {/* Product showcase */}
+          <section id="leads" className="scroll-mt-28">
+            <SectionLabel index="03">Find leads</SectionLabel>
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <h2 className="max-w-xl font-heading text-4xl font-medium leading-[0.92] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
+                The part other CRMs skip
+              </h2>
+              <p className="max-w-sm text-muted-foreground sm:text-right">
+                Everything above helps you work a lead. This is where the lead
+                comes from in the first place.
               </p>
             </div>
-            <div className="h-px bg-primary-foreground/15" />
-            <div>
-              <div className="text-4xl font-extrabold tracking-tight">
-                8&nbsp;hrs
-              </div>
-              <p className="mt-1 text-sm text-primary-foreground/70">
-                saved per rep, per week — back to selling, not data entry.
+            <div className="mt-12">
+              <LeadFinder />
+            </div>
+          </section>
+
+          {/* Integrations / migration */}
+          <section id="integrations" className="mt-24 scroll-mt-28 sm:mt-32">
+            <SectionLabel index="04">Integrations</SectionLabel>
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <h2 className="max-w-xl font-heading text-4xl font-medium leading-[0.92] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
+                Switch without leaving anything behind
+              </h2>
+              <p className="max-w-sm text-muted-foreground sm:text-right">
+                Bring your contacts across from the CRM you already use, then
+                keep working in the inbox and tools your team lives in.
               </p>
             </div>
-          </div>
+            <div className="mt-12">
+              <Integrations />
+            </div>
+          </section>
+        </main>
+      </div>
 
-          {/* Testimonial */}
-          <div className="flex flex-col justify-between rounded-3xl border bg-card p-6 shadow-sm">
-            <Quote className="size-8 text-primary" />
-            <p className="mt-4 text-base font-medium leading-relaxed text-foreground">
-              &ldquo;We switched on a Friday and the team was fully running by
-              Monday. It just made sense.&rdquo;
-            </p>
-            <div className="mt-5 flex items-center gap-3">
-              <div className="grid size-9 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                MR
+      {/* Footer CTA — the bookend to the hero: same ink panel, same oversized
+          type, same pill-with-a-circle button. */}
+      <footer className="px-2 pb-2 sm:px-3 sm:pb-3">
+        <div className="relative mx-auto overflow-hidden rounded-2xl bg-landing-ink px-6 pb-6 pt-20 text-landing-cream sm:rounded-[2rem] sm:px-10 sm:pt-28">
+          <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.35] mix-blend-overlay" />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-70"
+            aria-hidden
+            style={{
+              background:
+                "radial-gradient(80% 70% at 15% 100%, #2743c9 0%, transparent 60%)",
+            }}
+          />
+
+          <div className="relative mx-auto max-w-6xl">
+            <div className="grid grid-cols-12 items-end gap-6">
+              <div className="col-span-12 lg:col-span-8">
+                <h2 className="font-heading text-[13vw] font-medium leading-[0.85] tracking-[-0.06em] sm:text-[11vw] lg:text-[8.5vw]">
+                  <WordsPullUpMultiStyle
+                    segments={[
+                      { text: "Let's close more," },
+                      { text: "together", className: "text-landing-cream/45" },
+                    ]}
+                  />
+                </h2>
               </div>
-              <div className="text-sm">
-                <div className="font-semibold">Maya Rivera</div>
-                <div className="text-muted-foreground">
-                  Head of Sales, Lumen
+
+              <div className="col-span-12 flex flex-col items-start gap-6 pb-4 lg:col-span-4 lg:pb-8">
+                <p className="max-w-sm text-sm leading-snug text-landing-cream/60 sm:text-base">
+                  Bring your team onto Handshake today. Free to start, no credit
+                  card required.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Link
+                    href={ctaHref}
+                    className="group inline-flex items-center gap-2 rounded-full bg-landing-cream py-1 pl-5 pr-1 text-sm font-semibold text-landing-ink transition-all hover:gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-cream sm:text-base"
+                  >
+                    {ctaLabel}
+                    <span className="flex size-9 items-center justify-center rounded-full bg-landing-ink transition-transform group-hover:scale-110 sm:size-10">
+                      <ArrowRight className="size-4 text-landing-cream" />
+                    </span>
+                  </Link>
+                  {!user && (
+                    <Link
+                      href="/login"
+                      className="rounded-full border border-landing-cream/30 px-6 py-3 text-sm font-semibold text-landing-cream transition-colors hover:bg-landing-cream/10"
+                    >
+                      Log in
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* Why choose us */}
-        <section id="why" className="mt-24 scroll-mt-28 sm:mt-32">
-          <div className="rounded-3xl bg-primary p-8 text-primary-foreground sm:p-12 lg:p-16">
-            <h2 className="max-w-md text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Why teams choose Handshake as their home base
-            </h2>
-            <div className="mt-10 grid gap-x-10 gap-y-10 sm:grid-cols-2">
-              {VALUES.map((v) => (
-                <div key={v.title} className="flex gap-4">
-                  <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-foreground text-primary">
-                    <v.icon className="size-5" strokeWidth={2.5} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight">
-                      {v.title}
-                    </h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-primary-foreground/70">
-                      {v.body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Scroll-reveal statement */}
-        <section className="py-28 text-center sm:py-40">
-          <TextAnimation
-            text="Turn conversations into closed deals."
-            variants={{
-              hidden: { filter: "blur(10px)", opacity: 0, y: 20 },
-              visible: {
-                filter: "blur(0px)",
-                opacity: 1,
-                y: 0,
-                transition: { ease: "linear" },
-              },
-            }}
-            classname="mx-auto max-w-3xl text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl"
-          />
-          <TextAnimation
-            as="p"
-            letterAnime
-            text="built for teams who move fast"
-            variants={{
-              hidden: { filter: "blur(4px)", opacity: 0, y: 20 },
-              visible: {
-                filter: "blur(0px)",
-                opacity: 1,
-                y: 0,
-                transition: { duration: 0.2 },
-              },
-            }}
-            classname="mx-auto mt-6 max-w-md text-2xl font-medium lowercase text-muted-foreground sm:text-3xl"
-          />
-        </section>
-
-        {/* Product showcase */}
-        <section id="product" className="scroll-mt-28">
-          <div className="text-center">
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              See Handshake in action
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-              One workspace, four ways to move revenue forward.
-            </p>
-          </div>
-          <div className="mt-10">
-            <FeatureTabs />
-          </div>
-        </section>
-
-        {/* Logos */}
-        <section
-          id="customers"
-          className="mt-24 scroll-mt-28 text-center sm:mt-32"
-        >
-          <p className="text-sm font-medium text-muted-foreground">
-            Trusted by fast-moving revenue teams
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
-            {LOGOS.map((logo) => (
-              <span
-                key={logo}
-                className="text-xl font-extrabold tracking-tight text-muted-foreground/50 transition-colors hover:text-foreground/70"
-              >
-                {logo}
+            <div className="mt-16 flex flex-col items-start justify-between gap-3 border-t border-landing-cream/15 pt-5 text-xs text-landing-cream/40 sm:flex-row sm:items-center">
+              <span className="uppercase tracking-[0.18em]">Handshake</span>
+              <span>
+                &copy; {new Date().getFullYear()} Handshake. All rights
+                reserved.
               </span>
-            ))}
+            </div>
           </div>
-        </section>
-      </main>
-
-      {/* Footer CTA */}
-      <footer className="px-4 pb-4 sm:px-6">
-        <div className="mx-auto max-w-6xl overflow-hidden rounded-3xl bg-primary px-6 py-16 text-center text-primary-foreground sm:py-20">
-          <h2 className="mx-auto max-w-3xl text-4xl font-extrabold leading-[1] tracking-tight sm:text-6xl">
-            Let&rsquo;s close more, together
-          </h2>
-          <p className="mx-auto mt-5 max-w-lg text-primary-foreground/80">
-            Bring your team onto Handshake today. Free to start, no credit card
-            required.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href={user ? "/dashboard" : "/signup"}
-              className="inline-flex items-center gap-2 rounded-full bg-primary-foreground px-7 py-3.5 text-sm font-semibold text-primary transition-transform hover:scale-[1.02]"
-            >
-              {user ? "Go to dashboard" : "Get started free"}
-              <ArrowUpRight className="size-4" strokeWidth={2.5} />
-            </Link>
-            {!user && (
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 rounded-full border border-primary-foreground/30 px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/10"
-              >
-                Log in
-              </Link>
-            )}
-          </div>
-        </div>
-
-        <div className="mx-auto mt-6 flex max-w-6xl flex-col items-center justify-between gap-3 px-2 pb-6 text-sm text-muted-foreground sm:flex-row">
-          <span className="font-semibold text-foreground/70">Handshake</span>
-          <span>
-            &copy; {new Date().getFullYear()} Handshake. All rights reserved.
-          </span>
         </div>
       </footer>
     </div>

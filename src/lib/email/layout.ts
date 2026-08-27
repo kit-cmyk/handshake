@@ -4,11 +4,11 @@
 // mail clients. Table-based layout + inline styles are used deliberately —
 // Outlook and Gmail strip <style> blocks and ignore modern CSS.
 
-// Brand fonts (Google Sans primary, Nunito Sans secondary) lead the stack for
+// Brand fonts (Lexend for body copy, Outfit for display) lead the stack for
 // clients that load the web fonts linked in <head> (Apple Mail, iOS Mail).
 // Outlook/Gmail ignore web fonts and fall through to the system sans-serif tail.
 const FONT_STACK =
-  "'Google Sans','Nunito Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  "'Lexend','Outfit',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 /**
  * Wrap an HTML body fragment in the email shell. `preheader` is the short
@@ -27,8 +27,7 @@ export function wrapEmail(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light only" />
-<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet" />
-<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet" />
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;-webkit-text-size-adjust:100%;">
 ${preheader}

@@ -5,6 +5,8 @@ import {
   matchesDefinition,
   parseDefinition,
   fetchAllEvaluable,
+  fetchSegmentMemberIds,
+  replaceSegmentMembers,
   EVALUABLE_SELECT,
   type EvaluableContact,
 } from "@/lib/segments";
@@ -17,6 +19,7 @@ import {
   type MailboxSender,
 } from "@/lib/email/send";
 import { renderTemplate, withUnsubscribe } from "@/lib/email/template";
+import { resolveBookingLink } from "@/lib/email/booking-link";
 import { wrapEmail } from "@/lib/email/layout";
 import {
   withOpenPixel,
@@ -98,28 +101,28 @@ export const reevaluateSegments = inngest.createFunction(
         );
         const matchedIds = new Set(matched.map((c) => c.id));
 
-        const { data: existing } = await admin
-          .from("segment_members")
-          .select("contact_id")
-          .eq("segment_id", seg.id);
+        // Paged too: reading only the first 1000 cached rows would report
+        // every member past the cap as newly "added" on each run.
         const existingIds = new Set(
-          (existing ?? []).map((r) => (r as { contact_id: string }).contact_id)
+          await fetchSegmentMemberIds(admin, seg.org_id, {
+            id: seg.id,
+            type: "static",
+            definition: parseDefinition(seg.definition),
+          })
         );
 
         const added = [...matchedIds].filter((id) => !existingIds.has(id));
         const removed = [...existingIds].filter((id) => !matchedIds.has(id));
 
-        // Replace the cached membership.
-        await admin.from("segment_members").delete().eq("segment_id", seg.id);
-        if (matched.length) {
-          await admin.from("segment_members").insert(
-            matched.map((c) => ({
-              org_id: seg.org_id,
-              segment_id: seg.id,
-              contact_id: c.id,
-            }))
-          );
-        }
+        // Replace the cached membership. Chunked, and throwing on failure —
+        // the delete has already run, so a swallowed insert error would leave
+        // the segment empty while the run reports success.
+        await replaceSegmentMembers(
+          admin,
+          seg.org_id,
+          seg.id,
+          matched.map((c) => c.id)
+        );
         await admin
           .from("segments")
           .update({ last_evaluated_at: new Date().toISOString() })
@@ -219,6 +222,7 @@ export const campaignEngine = inngest.createFunction(
         email: string;
         display_name: string | null;
         daily_limit: number;
+        user_id: string | null;
       } | null = null;
       const { data: campaign } = await admin
         .from("campaigns")
@@ -228,17 +232,17 @@ export const campaignEngine = inngest.createFunction(
       if (campaign?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("id, email, display_name, daily_limit")
+          .select("id, email, display_name, daily_limit, user_id")
           .eq("id", campaign.mailbox_id)
           .single();
         mailbox = data;
       }
       const sendWindow = await loadSendWindow(admin, enr.org_id as string);
-      const { data: orgRow } = await admin
-        .from("organizations")
-        .select("booking_url")
-        .eq("id", enr.org_id as string)
-        .maybeSingle();
+      // The mailbox owner's own calendar link, falling back to the org's.
+      const bookingUrl = await resolveBookingLink(admin, {
+        orgId: enr.org_id as string,
+        userId: mailbox?.user_id,
+      });
       return {
         orgId: enr.org_id as string,
         campaignId: enr.campaign_id as string,
@@ -254,7 +258,7 @@ export const campaignEngine = inngest.createFunction(
         }[],
         contact: contact as LoadedContact | null,
         mailbox,
-        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
+        bookingUrl,
         sendWindow,
       };
     });
@@ -532,28 +536,32 @@ export const workflowRun = inngest.createFunction(
         .eq("id", run.contact_id)
         .single();
       const sendWindow = await loadSendWindow(admin, run.org_id as string);
-      const { data: orgRow } = await admin
-        .from("organizations")
-        .select("booking_url")
-        .eq("id", run.org_id as string)
-        .maybeSingle();
       // A workflow sends through a single mailbox, so its sending identity is
       // fixed for the whole run — resolve it once for the {{sender_*}} tokens.
-      let sender: { email: string; display_name: string | null } | null = null;
+      let sender: {
+        email: string;
+        display_name: string | null;
+        user_id: string | null;
+      } | null = null;
       if (wf?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("email, display_name")
+          .select("email, display_name, user_id")
           .eq("id", wf.mailbox_id)
           .single();
         sender = data;
       }
+      // The mailbox owner's own calendar link, falling back to the org's.
+      const bookingUrl = await resolveBookingLink(admin, {
+        orgId: run.org_id as string,
+        userId: sender?.user_id,
+      });
       return {
         run,
         wf,
         contact,
         sendWindow,
-        bookingUrl: (orgRow?.booking_url as string | null) ?? null,
+        bookingUrl,
         sender,
       };
     });
@@ -788,14 +796,51 @@ export const workflowRun = inngest.createFunction(
             case "add_to_segment": {
               const segmentId = String(node.data.config?.segmentId ?? "");
               if (segmentId) {
-                await admin.from("segment_members").upsert(
-                  {
-                    org_id: orgId,
-                    segment_id: segmentId,
-                    contact_id: contact.id,
-                  },
-                  { onConflict: "segment_id,contact_id", ignoreDuplicates: true }
-                );
+                // Only a static segment can hold a hand-added member: the
+                // hourly re-evaluation replaces a dynamic segment's membership
+                // wholesale, so a write here would silently vanish inside the
+                // hour. The builder only offers static segments, but a workflow
+                // saved before that (or a segment later switched to dynamic)
+                // can still reach this.
+                const { data: target } = await admin
+                  .from("segments")
+                  .select("id, type")
+                  .eq("id", segmentId)
+                  .eq("org_id", orgId)
+                  .maybeSingle();
+
+                if (target && (target as { type: string }).type === "static") {
+                  const { data: inserted } = await admin
+                    .from("segment_members")
+                    .upsert(
+                      {
+                        org_id: orgId,
+                        segment_id: segmentId,
+                        contact_id: contact.id,
+                      },
+                      {
+                        onConflict: "segment_id,contact_id",
+                        ignoreDuplicates: true,
+                      }
+                    )
+                    .select("contact_id");
+
+                  // Announce it so `segment_entry` workflows and segment
+                  // campaigns react to a hand-added member the same way they
+                  // react to the cron's. Only when the row is actually new —
+                  // ignoreDuplicates returns nothing for an existing member.
+                  if (inserted?.length) {
+                    await inngest.send({
+                      name: "segment/members.changed",
+                      data: {
+                        segmentId,
+                        orgId,
+                        added: [contact.id],
+                        removed: [],
+                      },
+                    });
+                  }
+                }
               }
               break;
             }
@@ -1011,8 +1056,74 @@ export const workflowRun = inngest.createFunction(
 );
 
 /**
- * Auto-enroll workflows on segment entry. Consumes the `segment/members.changed`
- * event emitted by the segment re-evaluation cron.
+ * Auto-enroll a campaign's audience on segment entry.
+ *
+ * A live campaign points at a segment; when someone new joins that segment they
+ * belong in the sequence. Without this the segment audience was only ever
+ * resolved once, at manual enrollment, so an active campaign on a dynamic
+ * segment quietly ignored every contact who started matching afterwards.
+ *
+ * Eligibility is `enrollContacts`' — email present, not unsubscribed or
+ * suppressed, not already enrolled, not in the exclusion segment — and
+ * `restrictToSegmentId` re-checks membership, so a contact who joined and left
+ * between the event and this run isn't enrolled.
+ */
+export const campaignSegmentEntry = inngest.createFunction(
+  {
+    id: "campaign-segment-entry",
+    triggers: [{ event: "segment/members.changed" }],
+  },
+  async ({ event, step }) => {
+    const admin = createAdminClient();
+    const segmentId = event.data.segmentId as string | undefined;
+    const orgId = event.data.orgId as string | undefined;
+    const added = event.data.added as string[] | undefined;
+    if (!segmentId || !orgId || !Array.isArray(added) || !added.length)
+      return { skipped: true };
+
+    // Only campaigns actively sending. Draft/paused/ended/archived ones enroll
+    // when (and if) they're started by hand.
+    const { data: campaigns } = await admin
+      .from("campaigns")
+      .select("id, exclude_segment_id")
+      .eq("org_id", orgId)
+      .eq("segment_id", segmentId)
+      .eq("status", "active");
+
+    let enrolled = 0;
+    for (const c of campaigns ?? []) {
+      const campaign = c as { id: string; exclude_segment_id: string | null };
+      const enrollmentIds = await step.run(
+        `enroll-${campaign.id}`,
+        async () =>
+          enrollContacts(admin, {
+            orgId,
+            campaignId: campaign.id,
+            contactIds: added,
+            excludeSegmentId: campaign.exclude_segment_id,
+            restrictToSegmentId: segmentId,
+          })
+      );
+      if (!enrollmentIds.length) continue;
+
+      await step.sendEvent(
+        `kick-${campaign.id}`,
+        enrollmentIds.map((id) => ({
+          name: "campaign/enrollment.started",
+          data: { enrollmentId: id },
+        }))
+      );
+      enrolled += enrollmentIds.length;
+    }
+    return { enrolled };
+  }
+);
+
+/**
+ * Auto-enroll workflows on segment entry. Consumes `segment/members.changed`,
+ * which is emitted by the re-evaluation cron *and* by every hand-made
+ * membership change (save, refresh, CSV import, `add_to_segment`), so a static
+ * segment triggers workflows just like a dynamic one.
  */
 export const workflowSegmentEntry = inngest.createFunction(
   { id: "workflow-segment-entry", triggers: [{ event: "segment/members.changed" }] },
@@ -1502,6 +1613,7 @@ export const functions = [
   reevaluateSegments,
   mailboxHealthCheck,
   campaignEngine,
+  campaignSegmentEntry,
   workflowRun,
   workflowSegmentEntry,
   workflowReplyTrigger,

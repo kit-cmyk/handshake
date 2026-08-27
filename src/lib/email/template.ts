@@ -1,6 +1,6 @@
 // Merge-tag ("shortcode") rendering for campaign emails. Tokens draw from the
-// contact and its company, plus the sender identity and the workspace booking
-// link resolved at send time. Unknown tokens render empty.
+// contact and its company, plus the sender identity and the booking link
+// resolved at send time. Unknown tokens render empty.
 
 export type MergeContact = {
   first_name?: string | null;
@@ -11,9 +11,9 @@ export type MergeContact = {
   lifecycle_stage?: string | null;
   company?: string | null;
   // Sender + workspace fields. These are the SAME for every recipient of a
-  // given send — filled from the sending mailbox and the org's booking URL, not
-  // the contact — but they ride along in the same map so templates can reference
-  // them with the same {{token}} syntax.
+  // given send — filled from the sending mailbox and the sender's booking URL
+  // (falling back to the org's), not the contact — but they ride along in the
+  // same map so templates can reference them with the same {{token}} syntax.
   sender_name?: string | null;
   sender_email?: string | null;
   booking_link?: string | null;

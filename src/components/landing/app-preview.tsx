@@ -119,7 +119,7 @@ const bar = "rounded-full bg-foreground/10";
 
 /* ----------------------------- Dashboard ----------------------------- */
 
-function DashboardScreen() {
+export function DashboardScreen() {
   const stats = [
     { label: "Contacts", value: "1,284", chip: "bg-sky-500/15 text-sky-600", ring: "ring-sky-500/20" },
     { label: "Companies", value: "312", chip: "bg-violet-500/15 text-violet-600", ring: "ring-violet-500/20" },
@@ -175,7 +175,7 @@ function DashboardScreen() {
 
 /* ------------------------------- Deals -------------------------------- */
 
-function DealsScreen() {
+export function DealsScreen() {
   const cols = [
     { name: "New", dot: "bg-sky-500", deals: [["Acme Co", "$12k"], ["Northwind", "$8k"]] },
     { name: "Qualified", dot: "bg-amber-500", deals: [["Lumen", "$24k"], ["Patex", "$5k"]] },
@@ -213,7 +213,7 @@ function DealsScreen() {
 
 /* ------------------------------ Contacts ------------------------------ */
 
-function ContactsScreen() {
+export function ContactsScreen() {
   const rows = [
     ["Maya Rivera", "maya@lumen.io", "Lumen", "Qualified", "bg-amber-500/15 text-amber-600"],
     ["Dev Okoro", "dev@acme.co", "Acme Co", "Won", "bg-emerald-500/15 text-emerald-600"],
@@ -269,7 +269,7 @@ function ContactsScreen() {
 
 /* ------------------------------ Campaigns ----------------------------- */
 
-function CampaignsScreen() {
+export function CampaignsScreen() {
   const rows = [
     ["Q3 Outreach", "Active", "bg-emerald-500/15 text-emerald-600", "4,820", "63%"],
     ["Renewal nudge", "Active", "bg-emerald-500/15 text-emerald-600", "1,210", "58%"],

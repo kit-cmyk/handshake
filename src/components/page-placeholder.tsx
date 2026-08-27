@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 
 export function PagePlaceholder({
   title,
@@ -11,10 +12,7 @@ export function PagePlaceholder({
 }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+      <PageHeader title={title} description={description} />
       <Card>
         <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
           <p className="text-sm font-medium">Coming soon</p>

@@ -1,7 +1,10 @@
 // Pure helpers for ingesting an inbound email into a message row. The inbound
 // webhook resolves the org/contact (via the signed reply token or a sender-email
 // match) and then calls buildInboundMessage; the conversation_id is attached by
-// the caller after upserting the conversation. No side effects — unit-testable.
+// the caller after resolving the thread. No side effects — unit-testable.
+
+import { parseAddressList } from "@/lib/email/recipients";
+import { normalizeMessageId } from "./threading";
 
 /** Strip HTML to a plain-text approximation for previews. */
 export function stripHtml(html: string): string {
@@ -33,7 +36,11 @@ export type ParsedInboundEmail = {
   subject?: string | null;
   text?: string | null;
   html?: string | null;
+  /** The reply's raw Cc header, if the provider forwarded it. */
+  cc?: string | null;
   messageId?: string | null;
+  /** The reply's In-Reply-To header — which of our sends it answers. */
+  inReplyTo?: string | null;
 };
 
 export type InboundContext = {
@@ -52,6 +59,7 @@ export function buildInboundMessage(
 ) {
   const body_text = email.text?.trim() || null;
   const body_html = email.html?.trim() || null;
+  const cc = parseAddressList(email.cc).addresses;
   return {
     org_id: ctx.orgId,
     contact_id: ctx.contactId,
@@ -59,11 +67,17 @@ export function buildInboundMessage(
     channel: "email" as const,
     from_address: email.from ?? null,
     to_address: email.to ?? null,
+    // Who else the contact copied: kept so a reply carries them forward.
+    cc_addresses: cc.length ? cc : null,
     subject: email.subject ?? null,
     body_html,
     body_text,
     snippet: makeSnippet({ text: body_text, html: body_html }),
     provider_message_id: email.messageId ?? null,
+    // Header ids, stored bare, so the next outbound in this thread can reference
+    // this reply and a later reply can be traced back to it.
+    message_id: normalizeMessageId(email.messageId),
+    in_reply_to: normalizeMessageId(email.inReplyTo),
     campaign_id: ctx.campaignId ?? null,
   };
 }

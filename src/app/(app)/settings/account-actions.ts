@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export type AccountState = { ok?: boolean; error?: string; message?: string };
+export type AccountState = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 export async function updateProfile(
   _prev: AccountState,
@@ -29,6 +35,52 @@ export async function updateProfile(
   return { ok: true, message: "Profile updated." };
 }
 
+/**
+ * Your personal scheduling URL. It fills the {{booking_link}} merge token on
+ * anything you send, overriding the workspace-wide link; clearing it falls back
+ * to the workspace link (Settings ▸ Workspace).
+ */
+export async function updateBookingLink(
+  _prev: AccountState,
+  fd: FormData
+): Promise<AccountState> {
+  const raw = String(fd.get("booking_url") ?? "").trim();
+  if (raw && !isValidHttpUrl(raw))
+    return {
+      error: "Booking link must be a full URL starting with https://.",
+      field: "booking_url",
+    };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ booking_url: raw || null })
+    .eq("id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/profile");
+  return {
+    ok: true,
+    message: raw
+      ? "Booking link saved."
+      : "Booking link cleared — emails now use the workspace link.",
+  };
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const AVATAR_EXT: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -42,11 +94,11 @@ export async function updateAvatar(
 ): Promise<AccountState> {
   const file = fd.get("avatar");
   if (!(file instanceof File) || file.size === 0)
-    return { error: "Choose an image to upload." };
+    return { error: "Choose an image to upload.", field: "avatar" };
   if (file.size > 2 * 1024 * 1024)
-    return { error: "Image must be 2 MB or smaller." };
+    return { error: "Image must be 2 MB or smaller.", field: "avatar" };
   const ext = AVATAR_EXT[file.type];
-  if (!ext) return { error: "Use a PNG, JPG, WEBP, or GIF image." };
+  if (!ext) return { error: "Use a PNG, JPG, WEBP, or GIF image.", field: "avatar" };
 
   const supabase = await createClient();
   const {
@@ -93,7 +145,7 @@ export async function updateEmail(
   fd: FormData
 ): Promise<AccountState> {
   const email = String(fd.get("email") ?? "").trim();
-  if (!email) return { error: "Enter an email." };
+  if (!email) return { error: "Enter an email.", field: "email" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ email });
@@ -111,8 +163,8 @@ export async function updatePasswordSettings(
   const password = String(fd.get("password") ?? "");
   const confirm = String(fd.get("confirm") ?? "");
   if (password.length < 6)
-    return { error: "Password must be at least 6 characters." };
-  if (password !== confirm) return { error: "Passwords do not match." };
+    return { error: "Password must be at least 6 characters.", field: "password" };
+  if (password !== confirm) return { error: "Passwords do not match.", field: "confirm" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });

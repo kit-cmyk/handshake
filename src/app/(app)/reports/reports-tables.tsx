@@ -7,6 +7,7 @@ import { Send, Workflow as WorkflowIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
+import { statusLabel } from "@/lib/utils";
 
 export type CampaignReportRow = {
   id: string;
@@ -41,7 +42,9 @@ export function CampaignReportTable({ data }: { data: CampaignReportRow[] }) {
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">{statusLabel(row.original.status)}</Badge>
+        ),
       },
       { accessorKey: "enrolled", header: "Enrolled" },
       { accessorKey: "sent", header: "Sent" },
@@ -98,7 +101,9 @@ export function WorkflowReportTable({ data }: { data: WorkflowReportRow[] }) {
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">{statusLabel(row.original.status)}</Badge>
+        ),
       },
       { accessorKey: "total", header: "Total runs" },
       { accessorKey: "completed", header: "Completed" },

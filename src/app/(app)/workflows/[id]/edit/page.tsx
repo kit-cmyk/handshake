@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { WorkflowBuilder } from "../../workflow-builder";
 import { loadEmailSnippets } from "@/lib/templates/queries";
@@ -37,7 +36,12 @@ export default async function EditWorkflowPage({
     { data: otherWorkflows },
     { data: mailboxes },
   ] = await Promise.all([
-    supabase.from("segments").select("id, name").eq("org_id", org.id).order("name"),
+    supabase
+      .from("segments")
+      .select("id, name, type")
+      .eq("org_id", org.id)
+      .eq("managed", false)
+      .order("name"),
     supabase
       .from("campaigns")
       .select("id, name")
@@ -58,9 +62,9 @@ export default async function EditWorkflowPage({
       .eq("status", "active"),
   ]);
 
-  const segmentOptions = ((segments ?? []) as Pick<Segment, "id" | "name">[]).map(
-    (s) => ({ id: s.id, name: s.name })
-  );
+  const segmentOptions = (
+    (segments ?? []) as Pick<Segment, "id" | "name" | "type">[]
+  ).map((s) => ({ id: s.id, name: s.name, type: s.type }));
   const campaignOptions = ((campaigns ?? []) as { id: string; name: string }[]).map(
     (c) => ({ id: c.id, name: c.name })
   );
@@ -76,16 +80,11 @@ export default async function EditWorkflowPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/workflows/${w.id}`}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to workflow
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Edit workflow</h1>
-        <p className="text-sm text-muted-foreground">{w.name}</p>
-      </div>
+      <PageHeader
+        back={{ href: `/workflows/${w.id}`, label: "Back to workflow" }}
+        title="Edit workflow"
+        description={w.name}
+      />
       <WorkflowBuilder
         workflow={w}
         segments={segmentOptions}

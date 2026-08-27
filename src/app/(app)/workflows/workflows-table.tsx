@@ -17,6 +17,7 @@ import { BulkDeleteButton } from "@/components/bulk-delete-button";
 import { EmptyState } from "@/components/empty-state";
 import { bulkDeleteWorkflows } from "./actions";
 import type { WorkflowStatus } from "@/lib/workflows";
+import { statusLabel } from "@/lib/utils";
 
 export type WorkflowRow = {
   id: string;
@@ -61,7 +62,7 @@ export function WorkflowsTable({ data }: { data: WorkflowRow[] }) {
         header: "Status",
         cell: ({ row }) => (
           <Badge variant={STATUS_VARIANT[row.original.status]}>
-            {row.original.status}
+            {statusLabel(row.original.status)}
           </Badge>
         ),
       },
@@ -94,8 +95,8 @@ export function WorkflowsTable({ data }: { data: WorkflowRow[] }) {
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s}
+              <SelectItem key={s} value={s}>
+                {statusLabel(s)}
               </SelectItem>
             ))}
           </SelectContent>

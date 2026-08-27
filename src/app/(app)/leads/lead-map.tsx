@@ -26,7 +26,7 @@ function escapeHtml(s: string): string {
  * the search radius. Rendered client-only (via next/dynamic) since Leaflet
  * touches `window`. Uses vector circleMarkers to avoid marker-image assets.
  */
-export default function ProspectMap({
+export default function LeadMap({
   center,
   radiusMeters,
   hits,

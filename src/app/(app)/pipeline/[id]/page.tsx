@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   Pencil,
   Building2,
   User,
@@ -17,12 +16,14 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 import { DealDialog } from "../deal-dialog";
 import { getDealProfile } from "../actions";
 import { DeleteDealButton } from "./delete-deal-button";
 import { DealQuickActions } from "../deal-quick-actions";
 import { DealTimeline } from "../deal-timeline";
 import { contactName, DEAL_PRIORITY_LABELS, type DealPriority } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 function money(v: number | null): string {
   if (v == null) return "—";
@@ -93,43 +94,41 @@ export default async function DealDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/pipeline"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to pipeline
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">{d.title}</h1>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-xl font-semibold">{money(d.value)}</span>
-            <Badge variant={STATUS_VARIANT[d.status]}>{d.status}</Badge>
+      <PageHeader
+        back="pipeline"
+        title={d.title}
+        description={
+          <span className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-xl font-semibold text-foreground">
+              {money(d.value)}
+            </span>
+            <Badge variant={STATUS_VARIANT[d.status]}>
+              {statusLabel(d.status)}
+            </Badge>
             <Badge variant={PRIORITY_VARIANT[d.priority]}>
               {DEAL_PRIORITY_LABELS[d.priority]} priority
             </Badge>
-            {d.stages?.name && (
-              <span className="text-muted-foreground">· {d.stages.name}</span>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <DealDialog
-            pipelineId={d.pipeline_id}
-            stages={stageList}
-            companies={companyOptions}
-            contacts={contactOptions}
-            deal={d}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
-              </Button>
-            }
-          />
-          <DeleteDealButton id={d.id} />
-        </div>
-      </div>
+            {d.stages?.name && <span>· {d.stages.name}</span>}
+          </span>
+        }
+        actions={
+          <>
+            <DealDialog
+              pipelineId={d.pipeline_id}
+              stages={stageList}
+              companies={companyOptions}
+              contacts={contactOptions}
+              deal={d}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            <DeleteDealButton id={d.id} />
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">

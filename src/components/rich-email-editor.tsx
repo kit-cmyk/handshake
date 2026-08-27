@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { EditorView } from "@tiptap/pm/view";
+import { Plugin } from "@tiptap/pm/state";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import {
   Bold,
   Italic,
@@ -27,7 +29,44 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { MergeTokenMenu } from "@/components/merge-token-menu";
 import { cn } from "@/lib/utils";
+
+/** Matches a `{{token}}` shortcode anywhere in the text. */
+const TOKEN_RE = /\{\{\s*[\w.]+\s*\}\}/g;
+
+/**
+ * Paints every `{{token}}` in the body as a chip, so shortcodes read as
+ * placeholders-to-be-filled rather than literal braces the reader will see.
+ * A decoration (not a mark) — the document still stores plain text, which is
+ * what renderTemplate expects at send time.
+ */
+const ShortcodeHighlight = Extension.create({
+  name: "shortcodeHighlight",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          decorations(state) {
+            const found: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (!node.isText || !node.text) return;
+              for (const m of node.text.matchAll(TOKEN_RE)) {
+                if (m.index === undefined) continue;
+                found.push(
+                  Decoration.inline(pos + m.index, pos + m.index + m[0].length, {
+                    class: "merge-token",
+                  }),
+                );
+              }
+            });
+            return DecorationSet.create(state.doc, found);
+          },
+        },
+      }),
+    ];
+  },
+});
 
 /** A reusable email snippet the editor can insert. */
 export type EmailSnippet = {
@@ -142,6 +181,7 @@ export function RichEmailEditor({
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
       Image.configure({ inline: false }),
       Placeholder.configure({ placeholder }),
+      ShortcodeHighlight,
     ],
     content: value,
     editorProps: {
@@ -261,6 +301,15 @@ export function RichEmailEditor({
           accept="image/*"
           className="hidden"
           onChange={onPickFile}
+        />
+        <div className="mx-1 h-5 w-px bg-border" />
+        <MergeTokenMenu
+          variant="toolbar"
+          label="Shortcode"
+          align="start"
+          onInsert={(token) =>
+            editor?.chain().focus().insertContent(`{{${token}}}`).run()
+          }
         />
         {emailTemplates && emailTemplates.length > 0 && (
           <>

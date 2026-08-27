@@ -73,7 +73,7 @@ export function SendWindowForm({
           name="timezone"
           defaultValue={timezone}
           disabled={!canManage}
-          className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm disabled:opacity-50"
+          className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-50"
         >
           {tzOptions.map((tz) => (
             <option key={tz} value={tz}>
@@ -91,7 +91,7 @@ export function SendWindowForm({
             name="start_hour"
             defaultValue={startHour}
             disabled={!canManage}
-            className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm disabled:opacity-50"
+            className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-50"
           >
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
@@ -107,7 +107,7 @@ export function SendWindowForm({
             name="end_hour"
             defaultValue={endHour}
             disabled={!canManage}
-            className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm disabled:opacity-50"
+            className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-50"
           >
             {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
               <option key={h} value={h}>

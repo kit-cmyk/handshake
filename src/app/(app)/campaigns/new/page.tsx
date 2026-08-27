@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { NewCampaign } from "./new-campaign";
 import { loadCampaignContacts } from "../contact-options";
@@ -11,6 +10,7 @@ import {
 import { isCampaignTemplate, type CampaignTemplate } from "@/lib/templates/types";
 import type { Mailbox } from "@/lib/types";
 import type { Segment } from "@/lib/segments";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 export default async function NewCampaignPage({
   searchParams,
@@ -20,26 +20,36 @@ export default async function NewCampaignPage({
   const { supabase, org, userEmail } = await requireContext();
   const { template: templateId } = await searchParams;
 
-  const [{ data: segments }, { data: mailboxes }, { data: members }, contacts] =
+  const [{ data: segments }, { data: mailboxes }, members, contacts] =
     await Promise.all([
       supabase
         .from("segments")
         .select("id, name, type")
         .eq("org_id", org.id)
+        // A campaign's own auto-managed audience list isn't a pickable segment.
+        .eq("managed", false)
         .order("name"),
       supabase
         .from("mailboxes")
         .select("id, email, display_name")
         .eq("org_id", org.id)
         .eq("status", "active"),
-      supabase.from("segment_members").select("segment_id").eq("org_id", org.id),
+      // Paged: these counts describe the whole org, and total membership
+      // crosses the 1000-row cap long before any single segment does.
+      fetchAllRows<{ segment_id: string }>((from, to) =>
+        supabase
+          .from("segment_members")
+          .select("segment_id, id")
+          .eq("org_id", org.id)
+          .order("id")
+          .range(from, to)
+      ),
       loadCampaignContacts(supabase, org.id),
     ]);
 
   const countBySegment = new Map<string, number>();
-  for (const m of members ?? []) {
-    const sid = (m as { segment_id: string }).segment_id;
-    countBySegment.set(sid, (countBySegment.get(sid) ?? 0) + 1);
+  for (const m of members) {
+    countBySegment.set(m.segment_id, (countBySegment.get(m.segment_id) ?? 0) + 1);
   }
 
   const segmentOptions = (
@@ -71,18 +81,11 @@ export default async function NewCampaignPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/campaigns"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to campaigns
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">New campaign</h1>
-        <p className="text-sm text-muted-foreground">
-          Five quick steps: details, audience, sequence, review, and schedule.
-        </p>
-      </div>
+      <PageHeader
+        back="campaigns"
+        title="New campaign"
+        description="Five quick steps: details, audience, sequence, review, and schedule."
+      />
       <NewCampaign
         templates={campaignTemplates}
         initialTemplate={initialTemplate}

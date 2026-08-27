@@ -7,6 +7,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError, fieldErrorProps } from "@/components/ui/field-error";
 import {
   Card,
   CardContent,
@@ -72,7 +73,11 @@ export function AuthForm({ mode, action, next }: Props) {
                 name="full_name"
                 autoComplete="name"
                 placeholder="Ada Lovelace"
+                {...fieldErrorProps("full_name", state.field === "full_name")}
               />
+              <FieldError id="full_name">
+                {state.field === "full_name" && state.error}
+              </FieldError>
             </div>
           )}
 
@@ -85,7 +90,11 @@ export function AuthForm({ mode, action, next }: Props) {
               autoComplete="email"
               placeholder="you@company.com"
               required
+              {...fieldErrorProps("email", state.field === "email")}
             />
+            <FieldError id="email">
+              {state.field === "email" && state.error}
+            </FieldError>
           </div>
 
           <div className="space-y-2">
@@ -109,6 +118,7 @@ export function AuthForm({ mode, action, next }: Props) {
                 placeholder="••••••••"
                 minLength={6}
                 required
+                {...fieldErrorProps("password", state.field === "password")}
               />
               <button
                 type="button"
@@ -119,12 +129,12 @@ export function AuthForm({ mode, action, next }: Props) {
                 {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
+            <FieldError id="password">
+              {state.field === "password" && state.error}
+            </FieldError>
           </div>
 
           <div aria-live="polite">
-            {state.error && (
-              <p className="text-sm text-destructive">{state.error}</p>
-            )}
             {state.message && (
               <p className="text-sm text-muted-foreground">{state.message}</p>
             )}

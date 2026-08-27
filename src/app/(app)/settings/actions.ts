@@ -15,7 +15,12 @@ import { decryptToken } from "@/lib/email/mailbox-crypto";
 import { revokeMailboxAccess } from "@/lib/email/mailbox-oauth";
 import { isMailboxProviderType } from "@/lib/email/mailbox-providers";
 
-export type MailboxState = { ok?: boolean; error?: string };
+export type MailboxState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,7 +37,7 @@ export async function addMailbox(
     Number(String(fd.get("daily_limit") ?? "200")) || 200
   );
 
-  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
+  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address.", field: "email" };
 
   const { error } = await supabase.from("mailboxes").insert({
     org_id: org.id,

@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Building2, Users, Mail, Blocks, KanbanSquare } from "lucide-react";
+import {
+  User,
+  Building2,
+  Users,
+  Mail,
+  Blocks,
+  KanbanSquare,
+  Database,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
@@ -12,6 +20,7 @@ const ITEMS = [
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/settings/mailboxes", label: "Mailboxes", icon: Mail },
   { href: "/settings/integrations", label: "Integrations", icon: Blocks },
+  { href: "/settings/data", label: "Data", icon: Database },
 ];
 
 export function SettingsNav() {

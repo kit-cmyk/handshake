@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 
-export type WorkspaceState = { ok?: boolean; error?: string; message?: string };
+export type WorkspaceState = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 const CAN_MANAGE = ["owner", "admin"];
 
@@ -17,13 +23,13 @@ export async function updateWorkspace(
     return { error: "Only workspace admins can change these settings." };
 
   const name = String(fd.get("name") ?? "").trim();
-  if (!name) return { error: "Workspace name is required." };
+  if (!name) return { error: "Workspace name is required.", field: "name" };
   if (name.length > 80)
-    return { error: "Workspace name must be 80 characters or fewer." };
+    return { error: "Workspace name must be 80 characters or fewer.", field: "name" };
 
   const bookingRaw = String(fd.get("booking_url") ?? "").trim();
   if (bookingRaw && !isValidHttpUrl(bookingRaw))
-    return { error: "Booking link must be a full URL starting with https://." };
+    return { error: "Booking link must be a full URL starting with https://.", field: "booking_url" };
   // Empty clears the link; templates then render the {{booking_link}} token empty.
   const booking_url = bookingRaw || null;
 
@@ -67,16 +73,16 @@ export async function updateSendWindow(
 
   const timezone = String(fd.get("timezone") ?? "UTC").trim();
   if (!isValidTimezone(timezone))
-    return { error: "Pick a valid timezone." };
+    return { error: "Pick a valid timezone.", field: "timezone" };
 
   const start = Number(fd.get("start_hour"));
   const end = Number(fd.get("end_hour"));
   if (!Number.isInteger(start) || start < 0 || start > 23)
-    return { error: "Start hour must be between 0 and 23." };
+    return { error: "Start hour must be between 0 and 23.", field: "start_hour" };
   if (!Number.isInteger(end) || end < 1 || end > 24)
-    return { error: "End hour must be between 1 and 24." };
+    return { error: "End hour must be between 1 and 24.", field: "end_hour" };
   if (start >= end)
-    return { error: "The start hour must be before the end hour." };
+    return { error: "The start hour must be before the end hour.", field: "start_hour" };
 
   // Checkbox group named "days": weekday numbers 0 (Sun) – 6 (Sat).
   const days = fd
@@ -84,7 +90,7 @@ export async function updateSendWindow(
     .map((d) => Number(d))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
   if (!days.length)
-    return { error: "Pick at least one sending day." };
+    return { error: "Pick at least one sending day.", field: "days" };
 
   const { error } = await supabase
     .from("organizations")

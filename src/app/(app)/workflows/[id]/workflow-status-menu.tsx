@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { enrollWorkflow, setWorkflowStatus } from "../actions";
 import type { WorkflowStatus } from "@/lib/workflows";
-import { cn } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 
 const TRIGGER_VARIANT: Record<WorkflowStatus, string> = {
   draft: "text-muted-foreground",
@@ -82,7 +82,7 @@ export function WorkflowStatusMenu({
     router.refresh();
   }
 
-  const label = status[0].toUpperCase() + status.slice(1);
+  const label = statusLabel(status);
   const terminal = status === "ended";
 
   return (

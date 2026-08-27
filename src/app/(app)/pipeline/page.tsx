@@ -2,6 +2,8 @@ import { Plus, KanbanSquare } from "lucide-react";
 import { requireContext } from "@/lib/context";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { DESTINATIONS } from "@/lib/nav";
 import { DealBoard } from "./deal-board";
 import { DealDialog } from "./deal-dialog";
 import {
@@ -27,7 +29,7 @@ export default async function DealsPage() {
   if (!pipeline) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
+        <PageHeader title={DESTINATIONS.pipeline.label} />
         <EmptyState
           icon={KanbanSquare}
           title="No pipeline set up yet"
@@ -71,25 +73,23 @@ export default async function DealsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pipeline</h1>
-          <p className="text-sm text-muted-foreground">
-            Move deals toward the close.
-          </p>
-        </div>
-        <DealDialog
-          pipelineId={pl.id}
-          stages={stageList}
-          companies={companyOptions.map((c) => ({ id: c.id, name: c.name }))}
-          contacts={contactOptions}
-          trigger={
-            <Button>
-              <Plus className="size-4" /> Add deal
-            </Button>
-          }
-        />
-      </div>
+      <PageHeader
+        title={DESTINATIONS.pipeline.label}
+        description={DESTINATIONS.pipeline.description}
+        actions={
+          <DealDialog
+            pipelineId={pl.id}
+            stages={stageList}
+            companies={companyOptions.map((c) => ({ id: c.id, name: c.name }))}
+            contacts={contactOptions}
+            trigger={
+              <Button>
+                <Plus className="size-4" /> Add deal
+              </Button>
+            }
+          />
+        }
+      />
 
       <DealBoard
         pipelineId={pl.id}

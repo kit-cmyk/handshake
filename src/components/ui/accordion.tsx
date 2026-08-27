@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CountBadge } from "./badge";
 
 /**
  * Minimal, dependency-free accordion. Each item manages its own open state, so
@@ -42,9 +43,7 @@ export function AccordionItem({
         <span className="flex items-center gap-2 text-sm font-medium">
           {title}
           {typeof count === "number" && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
-              {count}
-            </span>
+            <CountBadge count={count} />
           )}
         </span>
         <ChevronDown

@@ -36,7 +36,7 @@ import {
   type SkipReasons,
 } from "./actions";
 import { type CampaignStatus } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 
 /** Turn the per-reason skip counts into a short readable clause. */
 function summarizeReasons(r?: SkipReasons): string {
@@ -122,7 +122,7 @@ export function CampaignStatusMenu({
     router.refresh();
   }
 
-  const label = status[0].toUpperCase() + status.slice(1);
+  const label = statusLabel(status);
   const terminal = status === "ended";
 
   const runDescription =

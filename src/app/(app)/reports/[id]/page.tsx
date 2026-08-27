@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Badge } from "@/components/ui/badge";
 import { CampaignPerformance } from "@/components/campaign-performance";
 import { computeFunnel, type EventLite, type StepInfo } from "@/lib/funnel";
 import type { Campaign } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
 export default async function CampaignReportPage({
   params,
@@ -48,25 +51,18 @@ export default async function CampaignReportPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/reports/campaigns"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to reports
-      </Link>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{c.name}</h1>
-          <Badge variant="secondary">{c.status}</Badge>
-        </div>
-        <Link
-          href={`/campaigns/${c.id}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Open campaign <ExternalLink className="size-4" />
-        </Link>
-      </div>
+      <PageHeader
+        back="reports"
+        title={c.name}
+        badge={<Badge variant="secondary">{statusLabel(c.status)}</Badge>}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/campaigns/${c.id}`}>
+              Open campaign <ExternalLink className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
 
       <CampaignPerformance funnel={funnel} enrolled={enrolled ?? 0} />
     </div>

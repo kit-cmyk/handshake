@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { Unplug, RotateCcw, LayoutDashboard } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Unplug, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StatusScreen } from "@/components/status-screen";
+import { NavButton } from "@/components/nav-button";
 
 export default function AppError({
   error,
@@ -26,12 +26,7 @@ export default function AppError({
       <Button onClick={() => unstable_retry()}>
         <RotateCcw className="size-4" /> Try again
       </Button>
-      <Link
-        href="/dashboard"
-        className={buttonVariants({ variant: "outline" })}
-      >
-        <LayoutDashboard className="size-4" /> Back to dashboard
-      </Link>
+      <NavButton to="dashboard" label="Back to dashboard" />
       {error.digest ? (
         <p className="w-full pt-2 text-center font-mono text-xs text-muted-foreground">
           Reference: {error.digest}

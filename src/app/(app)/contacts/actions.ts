@@ -10,7 +10,12 @@ import {
   type LifecycleStage,
 } from "@/lib/types";
 
-export type FormState = { ok?: boolean; error?: string };
+export type FormState = {
+  ok?: boolean;
+  error?: string;
+  /** Which input the error belongs under, so forms can render it there. */
+  field?: string;
+};
 
 /** Everything the contact side sheet renders, in one round-trip. */
 export type ContactProfile = {
@@ -129,13 +134,20 @@ export async function saveContact(
   _prev: FormState,
   fd: FormData
 ): Promise<FormState> {
-  const { supabase, org } = await requireContext();
+  const { supabase, org, userId } = await requireContext();
   const id = str(fd, "id");
 
   const stageRaw = str(fd, "lifecycle_stage") ?? "new";
   const lifecycle_stage = (
     LIFECYCLE_STAGES.includes(stageRaw as LifecycleStage) ? stageRaw : "new"
   ) as LifecycleStage;
+
+  // Every other creation path (CSV import, Find leads, inbox capture, CRM sync)
+  // stamps an owner, so a hand-created contact with none was the odd one out and
+  // showed up as unassigned forever. Default a new contact to whoever made it;
+  // on edit, keep whatever the form submits (including an explicit "unassigned").
+  const ownerField = fd.has("owner_id") ? str(fd, "owner_id") : undefined;
+  const owner_id = id ? ownerField : (ownerField ?? userId);
 
   const payload = {
     org_id: org.id,
@@ -155,10 +167,13 @@ export async function saveContact(
     country: str(fd, "country"),
     // Only editable when updating an existing contact (see contact-dialog).
     ...(id ? { appointment_date: str(fd, "appointment_date") } : {}),
+    // Omit the key entirely when the form didn't submit one, so an edit from a
+    // surface without the owner picker can't blank an existing assignment.
+    ...(owner_id !== undefined ? { owner_id } : {}),
   };
 
   if (!payload.first_name && !payload.last_name && !payload.email) {
-    return { error: "Enter at least a name or an email." };
+    return { error: "Enter at least a name or an email.", field: "first_name" };
   }
 
   // A linked company must belong to this org. RLS hides foreign rows on read but
@@ -170,7 +185,20 @@ export async function saveContact(
       .select("id")
       .eq("id", payload.company_id)
       .maybeSingle();
-    if (!company) return { error: "Invalid company." };
+    if (!company) return { error: "Invalid company.", field: "company_id" };
+  }
+
+  // Same reasoning as the company check above: a server action is a public
+  // endpoint, so an owner id arriving in the form body has to be proved a member
+  // of this org rather than trusted.
+  if (owner_id) {
+    const { data: member } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("org_id", org.id)
+      .eq("user_id", owner_id)
+      .maybeSingle();
+    if (!member) return { error: "Invalid owner.", field: "owner_id" };
   }
 
   // Capture the prior stage so we can fire a stage-change event on transitions.
@@ -225,12 +253,49 @@ export async function bulkDeleteContacts(
 ): Promise<{ ok?: boolean; error?: string; deleted?: number }> {
   if (!ids.length) return { ok: true, deleted: 0 };
   const { supabase } = await requireContext();
+  // Same guard as deleteContact: deleting a contact SET-NULLs its deals, and a
+  // deal linked ONLY to a contact in this batch would then violate
+  // deals_contact_or_company_chk and abort the whole chunk. Drop those
+  // party-less deals first (company-linked deals survive with company only).
+  await supabase.from("deals").delete().in("contact_id", ids).is("company_id", null);
   const { error, count } = await supabase
     .from("contacts")
     .delete({ count: "exact" })
     .in("id", ids);
   if (error) return { error: error.message };
   return { ok: true, deleted: count ?? ids.length };
+}
+
+/**
+ * Reassign a batch of contacts to one owner (or to nobody, with a null id).
+ * Mirrors `bulkDeleteContacts`: the caller chunks and refreshes once at the end,
+ * so this skips per-call revalidation.
+ */
+export async function bulkAssignOwner(
+  ids: string[],
+  ownerId: string | null
+): Promise<{ ok?: boolean; error?: string; updated?: number }> {
+  if (!ids.length) return { ok: true, updated: 0 };
+  const { supabase, org } = await requireContext();
+
+  // Public endpoint — prove the target is in this org before writing it.
+  if (ownerId) {
+    const { data: member } = await supabase
+      .from("memberships")
+      .select("user_id")
+      .eq("org_id", org.id)
+      .eq("user_id", ownerId)
+      .maybeSingle();
+    if (!member) return { error: "Invalid owner." };
+  }
+
+  const { error, count } = await supabase
+    .from("contacts")
+    .update({ owner_id: ownerId }, { count: "exact" })
+    .eq("org_id", org.id)
+    .in("id", ids);
+  if (error) return { error: error.message };
+  return { ok: true, updated: count ?? ids.length };
 }
 
 export async function updateLifecycle(
@@ -240,7 +305,8 @@ export async function updateLifecycle(
   const { supabase, org } = await requireContext();
   // Server actions are public endpoints — the TS type isn't enforced at runtime,
   // so allowlist the stage explicitly rather than trusting the argument.
-  if (!LIFECYCLE_STAGES.includes(stage)) return { error: "Invalid lifecycle stage." };
+  if (!LIFECYCLE_STAGES.includes(stage))
+    return { error: "Invalid lifecycle stage.", field: "lifecycle_stage" };
   const { data: prev } = await supabase
     .from("contacts")
     .select("lifecycle_stage")

@@ -18,7 +18,8 @@ import type {
 // to action, and a signature — not one-line stubs. The signature and the "book
 // a time" links fill themselves from merge tokens resolved at send time:
 //   {{sender_name}} / {{sender_email}} — the sending mailbox's identity
-//   {{booking_link}}                   — the workspace booking URL (Settings ▸ Workspace)
+//   {{booking_link}}                   — the sender's booking URL (Settings ▸ Profile),
+//                                        or the workspace one (Settings ▸ Workspace)
 // Recipient tokens ({{first_name}}, {{company}}, {{title}}) come from the contact.
 
 /** Consistent sign-off used across the curated emails. */

@@ -26,6 +26,7 @@ import { DealDialog } from "./deal-dialog";
 import { DealQuickActions } from "./deal-quick-actions";
 import { DealTimeline } from "./deal-timeline";
 import { getDealProfile, deleteDeal, type DealProfile } from "./actions";
+import { statusLabel } from "@/lib/utils";
 import {
   contactName,
   DEAL_PRIORITY_LABELS,
@@ -171,7 +172,9 @@ export function DealSheet({
                     <span className="text-lg font-semibold">
                       {money(d.value)}
                     </span>
-                    <Badge variant={STATUS_VARIANT[d.status]}>{d.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[d.status]}>
+                      {statusLabel(d.status)}
+                    </Badge>
                     <Badge variant={PRIORITY_VARIANT[d.priority]}>
                       {DEAL_PRIORITY_LABELS[d.priority]}
                     </Badge>

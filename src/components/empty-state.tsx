@@ -60,7 +60,7 @@ function EmptyIllustration({ icon: Icon }: { icon: LucideIcon }) {
       <span className="absolute inset-0 rounded-full bg-primary/5 animate-hs-ping" />
       <span className="absolute inset-2 rounded-full bg-primary/10" />
       {/* the badge */}
-      <span className="animate-hs-float relative grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/25">
+      <span className="relative grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/25">
         <Icon className="size-7" strokeWidth={2} />
       </span>
       {/* a little sparkle */}

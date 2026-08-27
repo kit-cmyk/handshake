@@ -11,6 +11,8 @@ import {
   SearchX,
   AlertTriangle,
   CheckCircle2,
+  BellOff,
+  UserRoundCog,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -30,12 +32,14 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { BulkDeleteButton } from "@/components/bulk-delete-button";
+import { useBulkTask } from "@/components/bulk-task";
+import { AddToSegmentButton } from "./add-to-segment-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { ContactDialog } from "./contact-dialog";
 import { ContactSheet } from "./contact-sheet";
-import { bulkDeleteContacts, deleteContact } from "./actions";
+import { bulkAssignOwner, bulkDeleteContacts, deleteContact } from "./actions";
 import {
   contactName,
   LIFECYCLE_LABELS,
@@ -45,6 +49,9 @@ import {
 
 type CompanyOption = { id: string; name: string };
 type SegmentOption = { id: string; name: string };
+type OwnerOption = { id: string; name: string };
+
+const UNASSIGNED = "Unassigned";
 
 const ALL_SEGMENTS = "__all_segments";
 
@@ -86,11 +93,60 @@ function SegmentFilter({
   );
 }
 
+/**
+ * Reassigns the selected contacts to one owner via the chunked background task
+ * runner, the same path `BulkDeleteButton` uses, so a large selection does not
+ * become one enormous request.
+ */
+function BulkAssignOwner({
+  ids,
+  owners,
+  onDone,
+}: {
+  ids: string[];
+  owners: OwnerOption[];
+  onDone?: () => void;
+}) {
+  const bulk = useBulkTask();
+
+  const assign = (ownerId: string | null) => {
+    void bulk.run({
+      ids,
+      noun: "contact",
+      action: (chunk: string[]) => bulkAssignOwner(chunk, ownerId),
+      verb: "Assigning",
+      doneVerb: "Assigned",
+      onDone,
+    });
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8" disabled={bulk.running}>
+          <UserRoundCog className="size-4" /> Assign owner
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {owners.map((o) => (
+          <DropdownMenuItem key={o.id} onSelect={() => assign(o.id)}>
+            {o.name}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem onSelect={() => assign(null)}>
+          {UNASSIGNED}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function ContactsTable({
   data,
   health = {},
   companies,
   leadSources = [],
+  owners = [],
   segments = [],
   selectedSegmentId = null,
   selectedSegmentName = null,
@@ -100,6 +156,8 @@ export function ContactsTable({
   health?: Record<string, string[]>;
   companies: CompanyOption[];
   leadSources?: string[];
+  /** Org members who can own a contact. Empty hides the column and bulk action. */
+  owners?: OwnerOption[];
   segments?: SegmentOption[];
   selectedSegmentId?: string | null;
   selectedSegmentName?: string | null;
@@ -107,6 +165,11 @@ export function ContactsTable({
   const router = useRouter();
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+
+  const ownerNameById = React.useMemo(
+    () => new Map(owners.map((o) => [o.id, o.name])),
+    [owners],
+  );
 
   const columns = React.useMemo<ColumnDef<ContactWithCompany>[]>(
     () => [
@@ -121,17 +184,63 @@ export function ContactsTable({
       {
         accessorKey: "email",
         header: "Email",
-        cell: ({ getValue }) => (
-          <span className="text-muted-foreground">
-            {(getValue() as string) || "—"}
-          </span>
-        ),
+        cell: ({ row }) => {
+          // Opting out makes the address unusable, so it belongs next to the
+          // address rather than in the lifecycle column — `unsubscribed_at` is
+          // a separate flag from the "unsubscribed" lifecycle stage. Campaign
+          // enrollment silently skips these contacts (see lib/campaigns/
+          // enroll.ts), so without this the row looks perfectly mailable.
+          const email = row.original.email;
+          const optedOut = !!row.original.unsubscribed_at;
+          return (
+            <span className="flex items-center gap-2">
+              <span
+                className={
+                  optedOut
+                    ? "text-muted-foreground line-through"
+                    : "text-muted-foreground"
+                }
+              >
+                {email || "—"}
+              </span>
+              {optedOut && (
+                <Badge
+                  variant="destructive"
+                  className="gap-1"
+                  title={`Unsubscribed ${fmtDate(row.original.unsubscribed_at)} — excluded from all campaigns`}
+                >
+                  <BellOff className="size-3" />
+                  Unsubscribed
+                </Badge>
+              )}
+            </span>
+          );
+        },
       },
       {
         id: "company",
         header: "Company",
         accessorFn: (r) => r.companies?.name ?? "",
         cell: ({ row }) => row.original.companies?.name ?? "—",
+      },
+      {
+        id: "owner",
+        header: "Owner",
+        // Resolve to the display name so search, sorting and the facet all work
+        // off what is on screen rather than a uuid. Unowned rows get a real
+        // label so "Unassigned" is a filterable value, not an empty cell.
+        accessorFn: (r) =>
+          (r.owner_id && ownerNameById.get(r.owner_id)) || UNASSIGNED,
+        cell: ({ row }) => {
+          const name =
+            row.original.owner_id &&
+            ownerNameById.get(row.original.owner_id);
+          return name ? (
+            <span>{name}</span>
+          ) : (
+            <span className="text-muted-foreground">{UNASSIGNED}</span>
+          );
+        },
       },
       {
         accessorKey: "lifecycle_stage",
@@ -206,6 +315,7 @@ export function ContactsTable({
                   companies={companies}
                   contact={row.original}
                   leadSources={leadSources}
+                  owners={owners}
                   trigger={
                     <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                       <Pencil className="size-4" /> Edit
@@ -236,7 +346,7 @@ export function ContactsTable({
         ),
       },
     ],
-    [companies, leadSources, router, health],
+    [companies, leadSources, router, health, owners, ownerNameById],
   );
 
   return (
@@ -255,6 +365,9 @@ export function ContactsTable({
           format: (v) => LIFECYCLE_LABELS[v as LifecycleStage] ?? v,
         },
         { columnId: "company", title: "Company", searchable: true },
+        ...(owners.length
+          ? [{ columnId: "owner", title: "Owner", searchable: true }]
+          : []),
       ]}
       onRowClick={(r) => {
         setActiveId(r.id);
@@ -266,12 +379,22 @@ export function ContactsTable({
         ) : undefined
       }
       bulkActions={({ rows, clear }) => (
-        <BulkDeleteButton
-          ids={rows.map((r) => r.id)}
-          action={bulkDeleteContacts}
-          onDone={clear}
-          noun="contact"
-        />
+        <>
+          <AddToSegmentButton ids={rows.map((r) => r.id)} onDone={clear} />
+          {owners.length > 0 && (
+            <BulkAssignOwner
+              ids={rows.map((r) => r.id)}
+              owners={owners}
+              onDone={clear}
+            />
+          )}
+          <BulkDeleteButton
+            ids={rows.map((r) => r.id)}
+            action={bulkDeleteContacts}
+            onDone={clear}
+            noun="contact"
+          />
+        </>
       )}
       emptyState={
         selectedSegmentId ? (
@@ -311,6 +434,7 @@ export function ContactsTable({
         onOpenChange={setSheetOpen}
         companies={companies}
         leadSources={leadSources}
+        owners={owners}
       />
     )}
     </>

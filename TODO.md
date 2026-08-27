@@ -7,15 +7,12 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
 
 - [x] **Apply migration `0016_contact_fields.sql`** — `lead_source`, `address`,
   `appointment_date` on `contacts`. Applied.
-- [ ] **Apply migration `0017_contact_address.sql`** — adds structured,
+- [x] **Apply migration `0017_contact_address.sql`** — structured,
   international address columns (`address_line2`, `city`, `region`,
-  `postal_code`, `country`) to `contacts`. Run it against the Supabase project
-  so the structured address inputs, CSV import mapping, and displays have
-  backing columns. Until applied, saving these fields will error.
-- [ ] **Apply migration `0018_company_geo.sql`** — adds `latitude`/`longitude`
-  to `companies` for map plotting and radius search on the Find leads page.
-  Until applied, prospected businesses won't persist coordinates (the results
-  map still works from the live search response).
+  `postal_code`, `country`) on `contacts`. Applied.
+- [x] **Apply migration `0018_company_geo.sql`** — `latitude`/`longitude` on
+  `companies` for map plotting and radius search on the Find leads page
+  (`/leads`). Applied.
 - [x] **Apply migration `0019_deal_detail.sql`** — `service`, `description`,
   `priority` on `deals` + the `appointment` activity type. Applied.
 - [x] **Apply migration `0020_inbox.sql`** — `conversations`, `messages`,
@@ -25,11 +22,10 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   column on `stages` (the configurable stage→lifecycle mapping), backfills
   existing stages by name, and updates `create_org_with_owner` to seed it.
   Applied.
-- [ ] **Apply migration `0023_campaign_audience.sql`** — adds `audience_mode`
-  (`segment` | `contacts` | `import`) and `send_delay_minutes` to `campaigns`,
+- [x] **Apply migration `0023_campaign_audience.sql`** — `audience_mode`
+  (`segment` | `contacts` | `import`) and `send_delay_minutes` on `campaigns`,
   backing the 5-step campaign wizard's audience choice and the "At delay" send
-  time. Until applied, saving a campaign from the wizard will error (the columns
-  don't exist yet).
+  time. Applied.
 
 ## Inbox
 
@@ -65,7 +61,8 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   demographic filter controls once a real source backs them.
 - [ ] **Persisted map view of companies** — `companies.latitude/longitude` are
   now captured on prospect import; a saved-companies map (filter by radius over
-  existing CRM data, not just the last search) could reuse `ProspectMap`.
+  existing CRM data, not just the last search) could reuse `LeadMap`
+  (`src/app/(app)/leads/lead-map.tsx`).
 
 ## Deals / Calendar
 

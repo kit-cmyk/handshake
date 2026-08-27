@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  FieldError,
+  fieldErrorProps,
+  errorFor,
+} from "@/components/ui/field-error";
 import { createOrg } from "./actions";
 
 export function OnboardingForm() {
@@ -21,7 +26,11 @@ export function OnboardingForm() {
               name="full_name"
               placeholder="Ada Lovelace"
               autoComplete="name"
+              {...fieldErrorProps("full_name", !!errorFor(state, "full_name"))}
             />
+            <FieldError id="full_name">
+              {errorFor(state, "full_name")}
+            </FieldError>
           </div>
           <div className="space-y-2">
             <Label htmlFor="name">Workspace name</Label>
@@ -30,11 +39,10 @@ export function OnboardingForm() {
               name="name"
               placeholder="Acme Agency"
               required
+              {...fieldErrorProps("name", !!errorFor(state, "name", "name"))}
             />
+            <FieldError id="name">{errorFor(state, "name", "name")}</FieldError>
           </div>
-          {state.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
-          )}
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={pending}>

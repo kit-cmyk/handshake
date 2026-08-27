@@ -21,7 +21,7 @@ export default function GlobalError({
       <title>Something went wrong — Handshake</title>
       <body className="min-h-full bg-background text-foreground">
         <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 py-16 text-center">
-          <span className="animate-hs-float grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-xl shadow-primary/25">
+          <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-xl shadow-primary/25">
             <Unplug className="size-8" strokeWidth={2} />
           </span>
           <div className="animate-hs-pop space-y-2">

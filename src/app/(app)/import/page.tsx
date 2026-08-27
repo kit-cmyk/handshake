@@ -1,6 +1,7 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/lib/context";
+import { PageHeader } from "@/components/page-header";
+import { NavButton } from "@/components/nav-button";
+import { DESTINATIONS } from "@/lib/nav";
 import { ImportWizard } from "./import-wizard";
 import { ImportHistoryTable } from "./import-history-table";
 import type { ImportBatch } from "@/lib/types";
@@ -19,18 +20,12 @@ export default async function ImportPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/contacts"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to contacts
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Import contacts</h1>
-        <p className="text-sm text-muted-foreground">
-          Upload a CSV of contacts or companies — map columns, dedupe, and import.
-        </p>
-      </div>
+      <PageHeader
+        back="contacts"
+        title="Import contacts"
+        description={DESTINATIONS.import.description}
+        actions={<NavButton to="leads" />}
+      />
 
       <ImportWizard />
 

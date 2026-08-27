@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { requireContext } from "@/lib/context";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { WorkflowStatusMenu } from "./workflow-status-menu";
 import { WorkflowActions } from "./workflow-actions";
 import { WorkflowTabs } from "./workflow-tabs";
 import { WorkflowSteps, type StepItem } from "./workflow-steps";
+import { statusLabel } from "@/lib/utils";
 import {
   parseGraph,
   parseExitConfig,
@@ -225,27 +226,25 @@ export default async function WorkflowDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/workflows"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Back to workflows
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{w.name}</h1>
-          <Badge variant={STATUS_VARIANT[w.status]}>{w.status}</Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <WorkflowStatusMenu
-            workflowId={w.id}
-            status={w.status}
-            canEnroll={canEnroll}
-          />
-          <WorkflowActions workflowId={w.id} />
-        </div>
-      </div>
+      <PageHeader
+        back="workflows"
+        title={w.name}
+        badge={
+          <Badge variant={STATUS_VARIANT[w.status]}>
+            {statusLabel(w.status)}
+          </Badge>
+        }
+        actions={
+          <>
+            <WorkflowStatusMenu
+              workflowId={w.id}
+              status={w.status}
+              canEnroll={canEnroll}
+            />
+            <WorkflowActions workflowId={w.id} />
+          </>
+        }
+      />
 
       {warnings.length > 0 && (
         <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">

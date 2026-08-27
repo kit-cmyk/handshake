@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import type { ScrapeJob } from "@/lib/types";
+import { statusLabel } from "@/lib/utils";
 
-export function ProspectHistoryTable({ data }: { data: ScrapeJob[] }) {
+export function SearchHistoryTable({ data }: { data: ScrapeJob[] }) {
   const columns = React.useMemo<ColumnDef<ScrapeJob>[]>(
     () => [
       {
@@ -79,9 +80,9 @@ export function ProspectHistoryTable({ data }: { data: ScrapeJob[] }) {
               )}
             </div>
           ) : j.status === "failed" ? (
-            <Badge variant="destructive">failed</Badge>
+            <Badge variant="destructive">Failed</Badge>
           ) : (
-            <Badge variant="secondary">{j.status}</Badge>
+            <Badge variant="secondary">{statusLabel(j.status)}</Badge>
           );
         },
       },

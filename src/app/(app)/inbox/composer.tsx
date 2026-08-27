@@ -15,7 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RichEmailEditor } from "@/components/rich-email-editor";
+import {
+  RichEmailEditor,
+  type EmailSnippet,
+} from "@/components/rich-email-editor";
+import { MergeTokenMenu, insertTokenAt } from "@/components/merge-token-menu";
+import { replySubject } from "@/lib/inbox/threading";
+import { CopyFields, type CopyLists } from "./copy-fields";
 import {
   sendEmail,
   logActivity,
@@ -36,13 +42,20 @@ export function Composer({
   conversationId,
   contactId,
   contactEmail,
-  defaultSubject = "",
+  threadSubject,
+  threadCc = [],
+  templates = [],
   onDone,
 }: {
   conversationId: string;
   contactId: string;
   contactEmail: string | null;
-  defaultSubject?: string;
+  /** The thread's subject; the reply inherits it as "Re: …". */
+  threadSubject: string | null;
+  /** Cc from the thread's latest message — carried into the reply. */
+  threadCc?: string[];
+  /** Saved + curated email templates for the editor's "Insert template" menu. */
+  templates?: EmailSnippet[];
   onDone: () => void;
 }) {
   const [mode, setMode] = React.useState<Mode>(contactEmail ? "reply" : "log");
@@ -59,9 +72,12 @@ export function Composer({
       </div>
       {mode === "reply" ? (
         <ReplyForm
+          key={conversationId}
           conversationId={conversationId}
           contactEmail={contactEmail}
-          defaultSubject={defaultSubject}
+          threadSubject={threadSubject}
+          threadCc={threadCc}
+          templates={templates}
           onDone={onDone}
         />
       ) : (
@@ -103,12 +119,16 @@ function TabButton({
 function ReplyForm({
   conversationId,
   contactEmail,
-  defaultSubject,
+  threadSubject,
+  threadCc,
+  templates,
   onDone,
 }: {
   conversationId: string;
   contactEmail: string | null;
-  defaultSubject: string;
+  threadSubject: string | null;
+  threadCc: string[];
+  templates: EmailSnippet[];
   onDone: () => void;
 }) {
   const action = sendEmail.bind(null, conversationId);
@@ -117,17 +137,29 @@ function ReplyForm({
     {}
   );
   const [body, setBody] = React.useState("");
-  const [subject, setSubject] = React.useState(defaultSubject);
+  const inherited = replySubject(threadSubject);
+  // A reply keeps the thread's subject; renaming is a deliberate act, so the
+  // field only appears when asked for (or when the thread has no subject yet).
+  const [subject, setSubject] = React.useState(inherited);
+  const [renaming, setRenaming] = React.useState(!inherited);
+  // Everyone the thread's last message copied stays copied, like a ticket's
+  // followers — visible and editable before it goes out.
+  const [copies, setCopies] = React.useState<CopyLists>({
+    cc: threadCc.join(", "),
+    bcc: "",
+  });
   const formRef = React.useRef<HTMLFormElement>(null);
+  const subjectRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (state.ok) {
       // Reacts to a form-submit result; the effect is required for the onDone() call.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setBody("");
+      setCopies({ cc: threadCc.join(", "), bcc: "" });
       onDone();
     }
-  }, [state, onDone]);
+  }, [state, onDone, threadCc]);
 
   if (!contactEmail) {
     return (
@@ -141,23 +173,60 @@ function ReplyForm({
   return (
     <form ref={formRef} action={formAction} className="space-y-2 p-3">
       <input type="hidden" name="body" value={body} />
-      <Input
-        name="subject"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        placeholder="Subject"
-        aria-label="Subject"
-      />
+      {renaming ? (
+        <div className="flex items-center gap-2">
+          <Input
+            ref={subjectRef}
+            name="subject"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject"
+            aria-label="Subject"
+            autoFocus={!!inherited}
+          />
+          <MergeTokenMenu
+            label="Shortcode"
+            onInsert={(token) => {
+              const next = insertTokenAt(subjectRef.current, subject, token);
+              setSubject(next.value);
+            }}
+          />
+        </div>
+      ) : (
+        <div className="flex items-baseline gap-2 text-xs">
+          <span className="truncate text-muted-foreground">
+            Replying in{" "}
+            <span className="font-medium text-foreground">{inherited}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setRenaming(true)}
+            className="shrink-0 font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Change subject
+          </button>
+        </div>
+      )}
+      <CopyFields value={copies} onChange={setCopies} />
       <RichEmailEditor
         value={body}
         onChange={setBody}
-        placeholder="Write a reply… use {{first_name}}, {{company}} for merge tags."
+        emailTemplates={templates}
+        onApplyTemplate={(snippet) => {
+          // A template carries its own subject; applying one is a deliberate
+          // rename, so reveal the field rather than change it out of sight.
+          if (snippet.subject) {
+            setSubject(snippet.subject);
+            setRenaming(true);
+          }
+        }}
+        placeholder="Write a reply… pick a template, or insert a {{shortcode}}."
       />
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">To: {contactEmail}</span>
         <Button type="submit" size="sm" disabled={pending}>
-          <Send className="size-4" /> {pending ? "Sending…" : "Send email"}
+          <Send className="size-4" /> {pending ? "Sending…" : "Send reply"}
         </Button>
       </div>
     </form>
