@@ -64,6 +64,37 @@ function providerFor(type: MailboxProviderType, accessToken: string): EmailProvi
 const EXPIRY_SKEW_MS = 60_000;
 
 /**
+ * Whether a failed send is worth trying again shortly.
+ *
+ * This matters because the campaign engine records a failure and *advances* to
+ * the next step. A transient rate-limit from Gmail would therefore burn that
+ * step permanently: the contact never receives the email and the sequence moves
+ * on as though it had. Callers use this to retry instead.
+ *
+ * Retryable: 429 (rate limited — the provider rejected it, so nothing was
+ * delivered), 5xx (provider-side fault), and transport errors that never got an
+ * HTTP status at all.
+ *
+ * Not retryable: 4xx like 400/403 (malformed or refused — it will fail
+ * identically next time) and 401, which sendViaMailbox has already retried once
+ * against a force-refreshed token.
+ *
+ * A 5xx is not strictly provably undelivered — `messages.send` is not
+ * idempotent, so a retry could in principle duplicate a message the provider
+ * accepted but failed to acknowledge. That is the better risk: a duplicate is
+ * visible and recoverable, whereas the current behavior drops the email
+ * silently and no one ever finds out.
+ */
+export function isRetryableSendFailure(res: SendResult): boolean {
+  if (res.status !== "failed") return false;
+  const error = res.error ?? "";
+  const status = /^(\d{3})/.exec(error)?.[1];
+  if (!status) return true; // no HTTP status → transport/network error
+  if (status === "429") return true;
+  return status.startsWith("5");
+}
+
+/**
  * Ensure a live access token, refreshing + persisting when stale. Returns the
  * usable token, or null when the mailbox can no longer authenticate (in which
  * case connect_error has been written).
@@ -108,6 +139,32 @@ async function ensureAccessToken(
 
 async function markError(db: SupabaseClient, id: string, error: string): Promise<void> {
   await db.from("mailboxes").update({ connect_error: error }).eq("id", id);
+}
+
+/**
+ * Confirm a connected mailbox can still authenticate, by forcing a token
+ * refresh. On failure `connect_error` is written (by ensureAccessToken), which
+ * is what surfaces the Reconnect prompt in settings.
+ *
+ * Without this, a revoked or expired mailbox keeps showing a green "Connected"
+ * badge until the next campaign happens to fail on it — tokens are otherwise
+ * only refreshed in the course of an actual send. Returns false for a mailbox
+ * that isn't a connected account at all (nothing to check).
+ */
+export async function revalidateMailbox(
+  db: SupabaseClient,
+  mailbox: MailboxSender,
+): Promise<boolean> {
+  if (!isConnectedMailbox(mailbox) || !isMailboxProviderType(mailbox.provider))
+    return false;
+  // token_expires_at: null forces the refresh rather than trusting the stored
+  // expiry — a token revoked at the provider looks unexpired to us.
+  const token = await ensureAccessToken(
+    db,
+    { ...mailbox, token_expires_at: null },
+    mailbox.provider,
+  );
+  return !!token;
 }
 
 /**

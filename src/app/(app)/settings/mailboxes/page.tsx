@@ -9,7 +9,7 @@ import {
 import { Mailboxes } from "../mailboxes";
 import { isEmailDeliveryConfigured } from "@/lib/email/provider";
 import {
-  MAILBOX_PROVIDERS,
+  offeredMailboxProviders,
   mailboxProviderLabel,
   isMailboxProviderType,
 } from "@/lib/email/mailbox-providers";
@@ -46,11 +46,11 @@ export default async function MailboxesSettingsPage({
     .eq("org_id", org.id)
     .order("created_at");
 
-  // Providers whose OAuth app is configured on this server — the others can't
-  // run the connect flow, so we don't offer them.
-  const connectable = MAILBOX_PROVIDERS.filter((p) =>
-    isMailboxProviderConfigured(p.type),
-  ).map((p) => ({ type: p.type, label: p.label, description: p.description, chip: p.chip }));
+  // Providers we advertise AND whose OAuth app is configured on this server —
+  // an unconfigured provider can't run the connect flow, so we don't offer it.
+  const connectable = offeredMailboxProviders()
+    .filter((p) => isMailboxProviderConfigured(p.type))
+    .map((p) => ({ type: p.type, label: p.label, description: p.description, chip: p.chip }));
 
   const sp = (await searchParams) ?? {};
   const connected = typeof sp.mailbox_connected === "string" ? sp.mailbox_connected : null;

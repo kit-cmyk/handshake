@@ -117,6 +117,47 @@ export async function refreshTokens(args: {
 }
 
 /**
+ * Revoke this app's access to a mailbox at the provider.
+ *
+ * Deleting our row stops *us* from using the tokens; only this stops the
+ * provider from honoring them, so without it a "disconnected" mailbox leaves a
+ * live grant on the user's Google account indefinitely. The settings screen
+ * promises otherwise, and Google's OAuth verification review expects an app
+ * holding a restricted scope to offer real revocation.
+ *
+ * Best-effort by design: resolves false instead of throwing, because a provider
+ * outage must never block the disconnect the user actually asked for.
+ *
+ * Google: revoking the refresh token invalidates every access token derived
+ * from it, so pass the refresh token when there is one.
+ *
+ * Microsoft: Graph has no per-application revoke. The only equivalent
+ * (invalidateAllRefreshTokens) signs the user out of every app on their
+ * account, which is far more than they asked for — so this is a deliberate
+ * no-op for Outlook, and the user removes the grant themselves at
+ * https://myaccount.microsoft.com/privacy.
+ */
+export async function revokeMailboxAccess(args: {
+  type: MailboxProviderType;
+  token: string;
+}): Promise<boolean> {
+  if (args.type !== "gmail") return false;
+  try {
+    const res = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: args.token }),
+    });
+    // A 400 (invalid_token) means it was already revoked or had expired — the
+    // desired end state either way, so report success rather than alarming the
+    // caller about a grant that no longer exists.
+    return res.ok || res.status === 400;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve the authenticated account's email address using the fresh access
  * token. This becomes the mailbox's authoritative "from" — Gmail and Graph both
  * reject sending as any other address.

@@ -142,9 +142,48 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
 
 ## Integrations / Email
 
-- [ ] **Gmail & Outlook OAuth mailboxes** — connect a mailbox via OAuth for
-  authenticated send-as delivery, instead of only provider-API sending.
-  (Removed the "Coming soon" placeholder card from the integrations page.)
+- [x] **Gmail & Outlook OAuth mailboxes** — built. OAuth connect/callback,
+  AES-256-GCM token storage, refresh-on-send with a forced-refresh retry,
+  Gmail `users.messages.send` / Graph `sendMail`, per-mailbox atomic daily cap,
+  revoke-on-disconnect, a "Send test" button, and a daily `mailbox-health-check`
+  cron that surfaces a Reconnect prompt before a campaign fails on a dead
+  mailbox. Remaining work is provisioning, not code — see the items below.
+- [ ] **Outlook is hidden pending its Azure app** — `offered: false` on the
+  outlook entry in `src/lib/email/mailbox-providers.ts` keeps the whole Outlook
+  implementation live (OAuth routes, refresh, sending) while withholding the
+  Connect button, since a button that 302s to `not_configured` is worse than no
+  button. Flip to `true` once `MICROSOFT_CLIENT_ID`/`_SECRET` are set.
+- [ ] **Google OAuth verification for `gmail.send`** — a *restricted* scope:
+  the Cloud project needs OAuth verification plus a CASA security assessment
+  before external users can connect. While the app is in "Testing" it is capped
+  at 100 test users and refresh tokens expire after 7 days, so every connected
+  Gmail mailbox breaks weekly — the `mailbox-health-check` cron is what makes
+  that visible rather than silent. Verification also requires a domain the
+  project owner can prove ownership of, which a `*.onrender.com` subdomain is
+  not: a custom domain is a prerequisite.
+- [ ] **Inbound mail for connected mailboxes** — `gmail.send` grants no read
+  access, so replies to a Gmail-sent campaign sit in the user's own Gmail and
+  reach Handshake only via the `reply+<token>@REPLY_DOMAIN` return address.
+  That needs `REPLY_DOMAIN` on a real domain with the provider's inbound parse
+  POSTing `/api/webhooks/inbound`. See "Real inbound-parse wiring" under Inbox.
+- [ ] **Bounce feedback for connected mailboxes is structurally limited** — a
+  DSN goes to the envelope sender, which for a Gmail send is the user's own
+  Gmail account, so we cannot see it with a send-only scope. What exists:
+  `/api/webhooks/inbound` now classifies anything reaching the reply address
+  (`src/lib/email/inbound-classify.ts`) and records a real bounce + suppression
+  instead of logging it as a reply. Anything that never reaches the reply
+  address stays invisible short of adding a Gmail read scope — which would mean
+  a second restricted scope and a harder verification review.
+- [ ] **Per-minute send throttle** — the daily cap is atomic
+  (`reserve_mailbox_send`) but there is no per-minute limit, and the engine runs
+  up to 20 concurrent enrollments, so a large enroll can burst past Gmail's
+  ~2 sends/sec per-user quota (and Graph's ~30/min). Mitigated rather than
+  solved: `isRetryableSendFailure` (`src/lib/email/send.ts`) now makes the
+  engine throw on a 429/5xx/network failure so Inngest retries with backoff,
+  instead of recording a failure and advancing to the next step — which used to
+  cost that contact the email silently. A real fix is a minute-bucket sibling to
+  `mailbox_send_counters` + the same defer loop; deferred because it needs
+  another migration for a burst the retry path already absorbs.
 - [ ] **Public API & Zapier** — push/pull records from external tools via a
   public API. (Removed the "Coming soon" placeholder card.)
 - [x] **Configurable default sender** — done. The fallback `from` is now

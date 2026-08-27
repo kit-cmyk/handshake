@@ -35,6 +35,13 @@ export type MailboxProviderMeta = {
   oauth: MailboxOAuthMeta;
   /** Tailwind chip classes for the card icon, to match the other cards. */
   chip: string;
+  /**
+   * Whether the connect flow is advertised in Settings. A provider set to false
+   * keeps every part of its implementation live — OAuth routes, token refresh,
+   * sending — so a mailbox already connected through it goes on working; it is
+   * simply not offered to new users. Flip to true to re-enable it.
+   */
+  offered: boolean;
 };
 
 export const MAILBOX_PROVIDERS: MailboxProviderMeta[] = [
@@ -43,6 +50,7 @@ export const MAILBOX_PROVIDERS: MailboxProviderMeta[] = [
     label: "Gmail",
     description: "Send campaigns and replies from your Gmail or Google Workspace account.",
     chip: "bg-red-500/15 text-red-600 dark:text-red-400",
+    offered: true,
     oauth: {
       authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: "https://oauth2.googleapis.com/token",
@@ -59,6 +67,10 @@ export const MAILBOX_PROVIDERS: MailboxProviderMeta[] = [
     label: "Outlook",
     description: "Send from your Outlook.com or Microsoft 365 account.",
     chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    // Held back: Gmail ships first. The Azure app isn't registered yet, and an
+    // "Connect Outlook" button that 302s to a not_configured error is worse
+    // than no button. Sending from an Outlook mailbox is unaffected.
+    offered: false,
     oauth: {
       authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
       tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -71,6 +83,11 @@ export const MAILBOX_PROVIDERS: MailboxProviderMeta[] = [
     },
   },
 ];
+
+/** Providers currently advertised for connecting. See `offered`. */
+export function offeredMailboxProviders(): MailboxProviderMeta[] {
+  return MAILBOX_PROVIDERS.filter((p) => p.offered);
+}
 
 export function mailboxProviderMeta(type: MailboxProviderType): MailboxProviderMeta {
   const meta = MAILBOX_PROVIDERS.find((p) => p.type === type);

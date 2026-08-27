@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org";
-import { isMailboxProviderType } from "@/lib/email/mailbox-providers";
+import {
+  isMailboxProviderType,
+  mailboxProviderMeta,
+} from "@/lib/email/mailbox-providers";
 import { authorizeUrl, mailboxOAuthClient } from "@/lib/email/mailbox-oauth";
 import { mailboxRedirectUri } from "@/lib/email/mailbox-redirect";
 
@@ -21,6 +24,10 @@ export async function GET(
   const settings = `${origin}/settings/mailboxes`;
 
   if (!isMailboxProviderType(provider))
+    return NextResponse.redirect(`${settings}?mailbox_error=unknown`);
+  // A provider we don't currently advertise can't be connected by hitting this
+  // URL directly either — see `offered` in mailbox-providers.
+  if (!mailboxProviderMeta(provider).offered)
     return NextResponse.redirect(`${settings}?mailbox_error=unknown`);
 
   const supabase = await createClient();
