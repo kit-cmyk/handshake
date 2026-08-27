@@ -1,236 +1,125 @@
-import Link from "next/link";
-import { Handshake, ArrowUpRight } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { getActiveOrg } from "@/lib/org";
+import { Suspense } from "react";
+import { Handshake } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { NavButton } from "@/components/nav-button";
+import { EmptyState } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
-import { DESTINATIONS, type NavKey } from "@/lib/nav";
-import { cn } from "@/lib/utils";
+import { DESTINATIONS } from "@/lib/nav";
+import { HeadlineStats } from "./headline-stats";
+import { ActionQueue } from "./action-queue";
+import { Breakdowns } from "./breakdowns";
+import { DataHealth } from "./data-health";
+import { RevenueChart } from "./revenue-chart";
+import { loadHeadline, loadWorkspaceState } from "./queries";
+import { revenueSeries } from "./metrics";
 
-async function count(
-  table: string,
-  orgId: string,
-  extra?: Record<string, string>
-): Promise<number> {
-  const supabase = await createClient();
-  const query = supabase
-    .from(table)
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
-    .match(extra ?? {});
-  const { count } = await query;
-  return count ?? 0;
-}
-
-const STATS: {
-  key: string;
-  to: NavKey;
-  label: string;
-  hint: string;
-  ring: string;
-  chip: string;
-  glow: string;
-}[] = [
-  {
-    key: "contacts",
-    to: "contacts",
-    label: "Contacts",
-    hint: "People in your pipeline",
-    ring: "ring-sky-500/20",
-    chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-    glow: "from-sky-500/20",
-  },
-  {
-    key: "companies",
-    to: "companies",
-    label: "Companies",
-    hint: "Accounts you're targeting",
-    ring: "ring-violet-500/20",
-    chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
-    glow: "from-violet-500/20",
-  },
-  {
-    key: "deals",
-    to: "pipeline",
-    label: "Open Deals",
-    hint: "Opportunities in motion",
-    ring: "ring-emerald-500/20",
-    chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    glow: "from-emerald-500/20",
-  },
-  {
-    key: "campaigns",
-    to: "campaigns",
-    label: "Campaigns",
-    hint: "Outreach sequences",
-    ring: "ring-amber-500/20",
-    chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-    glow: "from-amber-500/20",
-  },
-];
-
-const QUICK_ACTIONS: {
-  to: NavKey;
-  label: string;
-  desc: string;
-  chip: string;
-}[] = [
-  {
-    to: "leads",
-    label: "Find leads",
-    desc: "Search businesses and people into your CRM",
-    chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
-  },
-  {
-    to: "contacts",
-    label: "Add a contact",
-    desc: "Drop a new person into the pipeline",
-    chip: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  },
-  {
-    to: "campaigns",
-    label: "Launch a campaign",
-    desc: "Build a multi-step outreach sequence",
-    chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  },
-  {
-    to: "segments",
-    label: "Build a segment",
-    desc: "Group contacts to target your outreach",
-    chip: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-  },
-  {
-    to: "import",
-    label: "Import a CSV",
-    desc: "Bring an existing list on board",
-    chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  },
-  {
-    to: "reports",
-    label: "See reports",
-    desc: "Track opens, clicks, and replies",
-    chip: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
-  },
-];
-
+/**
+ * The workspace home.
+ *
+ * Order matters here: the money first, then the worklist, then the supporting
+ * detail. Each block is its own Suspense boundary, so the headline paints as
+ * soon as its three queries land rather than waiting on the slowest section.
+ *
+ * `now` is resolved once and threaded down, so every section agrees on where
+ * "this month" starts even if they resolve seconds apart.
+ */
 export default async function DashboardPage() {
-  const org = await getActiveOrg();
-  const orgId = org!.id;
+  const { empty } = await loadWorkspaceState();
+  const now = new Date();
 
-  const [contacts, companies, deals, campaigns] = await Promise.all([
-    count("contacts", orgId),
-    count("companies", orgId),
-    // "Open Deals" card — exclude won/lost so the headline metric matches label.
-    count("deals", orgId, { status: "open" }),
-    count("campaigns", orgId),
-  ]);
-
-  const values: Record<string, number> = {
-    contacts,
-    companies,
-    deals,
-    campaigns,
-  };
+  if (empty) return <NewWorkspace />;
 
   return (
-    <div className="space-y-8">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary to-primary/70 p-6 text-primary-foreground shadow-lg shadow-primary/20 sm:p-8">
-        <div className="animate-hs-float pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-12 right-24 size-32 rounded-full bg-white/5 blur-2xl" />
-        <div className="relative flex items-center gap-3">
-          <span className="animate-hs-wave grid size-11 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
-            <Handshake className="size-6" />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-primary-foreground">
-              Welcome back to {org!.name}
-            </h1>
-            <p className="text-sm text-primary-foreground/80">
-              Here&apos;s your pipeline at a glance. Let&apos;s close some deals.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={DESTINATIONS.dashboard.label}
+        description={DESTINATIONS.dashboard.description}
+        actions={
+          <>
+            <NavButton to="leads" />
+            <NavButton to="import" />
+          </>
+        }
+      />
 
-      {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {STATS.map((s) => {
-          const { href, icon: Icon } = DESTINATIONS[s.to];
-          return (
-          <Link key={s.key} href={href} className="group">
-            <Card
-              className={cn(
-                "relative h-full overflow-hidden ring-1 ring-inset transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md",
-                s.ring,
-              )}
-            >
-              <div
-                className={cn(
-                  "pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-gradient-to-br to-transparent opacity-70 blur-xl transition-opacity group-hover:opacity-100",
-                  s.glow,
-                )}
-              />
-              <div className="relative flex flex-col gap-4 p-5">
-                <div className="flex items-center justify-between">
-                  <span
-                    className={cn(
-                      "grid size-10 place-items-center rounded-xl",
-                      s.chip,
-                    )}
-                  >
-                    <Icon className="size-5" />
-                  </span>
-                  <ArrowUpRight className="size-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
-                </div>
-                <div>
-                  <p className="text-3xl font-bold tracking-tight tabular-nums">
-                    {values[s.key]}
-                  </p>
-                  <p className="text-sm font-medium">{s.label}</p>
-                  <p className="text-xs text-muted-foreground">{s.hint}</p>
-                </div>
-              </div>
-            </Card>
-          </Link>
-          );
-        })}
-      </div>
+      <Suspense fallback={<StripSkeleton />}>
+        <HeadlineStats now={now} />
+      </Suspense>
 
-      {/* Quick actions */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Quick actions</h2>
-          <p className="text-sm text-muted-foreground">
-            Jump straight into the good stuff.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {QUICK_ACTIONS.map((a) => {
-            const { href, icon: Icon } = DESTINATIONS[a.to];
-            return (
-            <Link key={a.to + a.label} href={href} className="group">
-              <Card className="flex h-full items-center gap-4 p-4 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md">
-                <span
-                  className={cn(
-                    "grid size-10 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-105",
-                    a.chip,
-                  )}
-                >
-                  <Icon className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium leading-tight">{a.label}</p>
-                  <p className="text-[11px] leading-snug text-muted-foreground">
-                    {a.desc}
-                  </p>
-                </div>
-                <ArrowUpRight className="size-4 shrink-0 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary lg:hidden" />
-              </Card>
-            </Link>
-            );
-          })}
-        </div>
-      </section>
+      <Suspense fallback={null}>
+        <DataHealth />
+      </Suspense>
+
+      <Suspense fallback={<BlockSkeleton height="h-64" />}>
+        <ActionQueue now={now} />
+      </Suspense>
+
+      <Suspense fallback={<BlockSkeleton height="h-56" />}>
+        <RevenuePanel now={now} />
+      </Suspense>
+
+      <Suspense fallback={<BlockSkeleton height="h-56" />}>
+        <Breakdowns />
+      </Suspense>
     </div>
   );
+}
+
+/**
+ * The revenue trend. Re-reads the headline data, which costs nothing extra —
+ * `requireContext` is request-cached and the underlying view query is the same
+ * one the KPI strip already issued in this render.
+ */
+async function RevenuePanel({ now }: { now: Date }) {
+  const { revenue, hasMetrics } = await loadHeadline(now);
+  if (!hasMetrics) return null;
+
+  return (
+    <Card className="p-4">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Revenue won · last 6 months
+      </h3>
+      <RevenueChart data={revenueSeries(revenue, now, 6)} />
+    </Card>
+  );
+}
+
+/**
+ * A workspace with nothing in it. Four zeroes and six shortcuts was the worst
+ * possible first impression; this names the three things that actually start
+ * the product working, and costs two counts instead of a dozen queries.
+ */
+function NewWorkspace() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={DESTINATIONS.dashboard.label}
+        description={DESTINATIONS.dashboard.description}
+      />
+      <EmptyState
+        icon={Handshake}
+        title="Let's fill this workspace"
+        description="Add the businesses you're chasing and this turns into your daily worklist — what's due, who replied, and what's gone quiet."
+      >
+        <NavButton to="leads" />
+        <NavButton to="import" />
+        <NavButton to="contacts" />
+      </EmptyState>
+    </div>
+  );
+}
+
+function StripSkeleton() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {[0, 1, 2, 3].map((i) => (
+        <Card key={i} className="h-[104px] animate-pulse bg-muted/40 p-4" />
+      ))}
+    </div>
+  );
+}
+
+/** Fixed heights, so streaming sections don't shove the page around. */
+function BlockSkeleton({ height }: { height: string }) {
+  return <Card className={`${height} animate-pulse bg-muted/40`} />;
 }

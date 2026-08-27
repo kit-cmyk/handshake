@@ -19,6 +19,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { moveDeal, deleteDeal } from "./actions";
 import type { DealPriority, DealWithRelations, Stage } from "@/lib/types";
 import { contactName, DEAL_PRIORITY_LABELS } from "@/lib/types";
+import { money } from "@/lib/utils";
 
 const PRIORITY_VARIANT: Record<
   DealPriority,
@@ -31,15 +32,6 @@ const PRIORITY_VARIANT: Record<
 
 type Option = { id: string; name: string };
 type ContactOption = { id: string; name: string; companyId: string | null };
-
-function money(v: number | null): string {
-  if (v == null) return "";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
-}
 
 export function DealBoard({
   pipelineId,
@@ -217,7 +209,8 @@ export function DealBoard({
                           title="Delete deal?"
                           description={`This permanently deletes “${deal.title}”. This can't be undone.`}
                           onConfirm={async () => {
-                            await deleteDeal(deal.id);
+                            const res = await deleteDeal(deal.id);
+                            if (res.error) return res;
                             router.refresh();
                           }}
                         />

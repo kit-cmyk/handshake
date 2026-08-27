@@ -31,7 +31,7 @@ import { LifecycleBadge } from "@/components/lifecycle-badge";
 import { ContactForm } from "./contact-form";
 import { contactName, formatAddress } from "@/lib/types";
 import { getContactProfile, deleteContact, type ContactProfile } from "./actions";
-import { statusLabel } from "@/lib/utils";
+import { money, statusLabel } from "@/lib/utils";
 
 type CompanyOption = { id: string; name: string };
 
@@ -39,15 +39,6 @@ function fmtDate(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
-}
-
-function money(v: number | null): string {
-  if (v == null) return "";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
 }
 
 /** Map a campaign/workflow status to a badge variant. */
@@ -139,7 +130,10 @@ export function ContactSheet({
   const c = profile?.contact;
 
   async function handleDelete() {
-    await deleteContact(contactId);
+    // Returning the failure keeps the dialog open instead of closing over a
+    // contact that is still there.
+    const res = await deleteContact(contactId);
+    if (res.error) return res;
     onOpenChange(false);
     router.refresh();
   }
