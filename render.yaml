@@ -43,6 +43,23 @@ services:
         sync: false
       - key: EMAIL_WEBHOOK_SECRET
         sync: false
+      # Encrypts stored Gmail/Outlook OAuth tokens at rest. Its absence is
+      # FATAL in production (mailbox-crypto refuses a guessable default), so a
+      # connected mailbox cannot be used at all without it.
+      - key: MAILBOX_TOKEN_SECRET
+        sync: false
+
+      # --- Connected sending mailboxes (Gmail / Outlook OAuth) ---
+      # Without these the "Connect Gmail/Outlook" buttons are hidden, leaving
+      # the global delivery provider below as the only way to send.
+      - key: GOOGLE_MAILBOX_CLIENT_ID
+        sync: false
+      - key: GOOGLE_MAILBOX_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
 
       # --- Optional / feature-gated (app falls back to mocks if unset) ---
       - key: GOOGLE_PLACES_API_KEY
@@ -51,6 +68,9 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      # Global delivery provider (Resend). UNSET MEANS THE MOCK PROVIDER: every
+      # send is logged and reported as "sent" while nothing is delivered. Set
+      # this, or connect a mailbox above, or production sends silently vanish.
       - key: EMAIL_PROVIDER_API_KEY
         sync: false
       - key: REPLY_DOMAIN

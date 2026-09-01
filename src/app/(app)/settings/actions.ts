@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
-import { getEmailProvider } from "@/lib/email/provider";
+import { getEmailProvider, isEmailDeliveryConfigured } from "@/lib/email/provider";
 import { wrapEmail } from "@/lib/email/layout";
 import {
   sendViaMailbox,
@@ -126,6 +126,20 @@ export async function sendMailboxTest(id: string): Promise<MailboxState> {
       return {
         error: "This mailbox needs to be reconnected before it can send.",
       };
+  }
+
+  // A mailbox that isn't a connected account sends through the global delivery
+  // provider — which, with no API key configured, is the mock: it logs the
+  // message and reports "sent". Letting that render as a passed test is worse
+  // than failing, because the entire purpose of this button is to prove real
+  // delivery, and a green result sends people hunting for the fault anywhere
+  // except the one place it is.
+  if (!isConnectedMailbox(mailbox) && !isEmailDeliveryConfigured()) {
+    return {
+      error:
+        "Email delivery isn't configured on this server, so no message was sent. " +
+        "Set EMAIL_PROVIDER_API_KEY, or connect a Gmail/Outlook account to send through it.",
+    };
   }
 
   const from = mailbox.display_name

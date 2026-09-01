@@ -25,6 +25,7 @@ import {
 } from "./actions";
 import type { Mailbox } from "@/lib/types";
 import { statusLabel } from "@/lib/utils";
+import { isMailboxProviderType } from "@/lib/email/mailbox-providers";
 
 const PROVIDER_LABELS: Record<string, string> = {
   resend: "Resend",
@@ -33,8 +34,16 @@ const PROVIDER_LABELS: Record<string, string> = {
   outlook: "Outlook",
 };
 
-function providerLabel(provider: string): string {
-  return PROVIDER_LABELS[provider] ?? provider;
+/**
+ * A mailbox's `provider` column is a snapshot taken when it was added, so a row
+ * created before the delivery key was configured keeps reporting "Test mode"
+ * forever — long after sends through it started working. Only a connected
+ * account's provider is really a property of the row; for everything else the
+ * server's live delivery provider is the truth, so prefer it.
+ */
+function providerLabel(provider: string, deliveryProvider: string): string {
+  const effective = isMailboxProviderType(provider) ? provider : deliveryProvider;
+  return PROVIDER_LABELS[effective] ?? effective;
 }
 
 /** A connectable OAuth mailbox provider whose app is configured on the server. */
@@ -47,17 +56,21 @@ type ConnectableProvider = {
 
 export function Mailboxes({
   mailboxes,
-  deliveryConfigured,
+  deliveryProvider,
   connectable,
   canManage,
   banner,
 }: {
   mailboxes: Mailbox[];
-  deliveryConfigured: boolean;
+  /** Live global delivery provider name, e.g. "resend" or "mock". */
+  deliveryProvider: string;
   connectable: ConnectableProvider[];
   canManage: boolean;
   banner: { kind: "ok" | "error"; text: string } | null;
 }) {
+  // "mock" is the provider used when no delivery API key is set — it logs and
+  // claims success, so it must never read as configured.
+  const deliveryConfigured = deliveryProvider !== "mock";
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   // Which row's test is in flight, and the last result — keyed by mailbox id so
@@ -111,13 +124,23 @@ export function Mailboxes({
         </p>
       )}
 
-      {deliveryConfigured && (
+      {deliveryConfigured ? (
         <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <p className="text-muted-foreground">
             Email delivery is connected. Campaigns and workflows send from these
             addresses — make sure each one is on a domain you&apos;ve verified
             with your delivery provider.
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-muted-foreground">
+            Email delivery isn&apos;t configured on this server, so these
+            mailboxes are in test mode — campaigns, workflows and test sends are
+            recorded but <strong>no message actually leaves</strong>. Connect a
+            Gmail or Outlook account, or set a delivery provider API key.
           </p>
         </div>
       )}
@@ -135,7 +158,7 @@ export function Mailboxes({
                     {m.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {m.daily_limit}/day · {providerLabel(m.provider)}
+                    {m.daily_limit}/day · {providerLabel(m.provider, deliveryProvider)}
                   </p>
                   {m.connect_error && (
                     <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">

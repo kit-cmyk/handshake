@@ -7,7 +7,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Mailboxes } from "../mailboxes";
-import { isEmailDeliveryConfigured } from "@/lib/email/provider";
+import { getEmailProvider } from "@/lib/email/provider";
 import {
   offeredMailboxProviders,
   mailboxProviderLabel,
@@ -77,7 +77,7 @@ export default async function MailboxesSettingsPage({
       <CardContent>
         <Mailboxes
           mailboxes={(mailboxes ?? []) as Mailbox[]}
-          deliveryConfigured={isEmailDeliveryConfigured()}
+          deliveryProvider={getEmailProvider().name}
           connectable={connectable}
           canManage={canManage}
           banner={banner}
