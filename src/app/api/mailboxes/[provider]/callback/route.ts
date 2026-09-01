@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveOrg } from "@/lib/org";
-import { isMailboxProviderType } from "@/lib/email/mailbox-providers";
+import {
+  defaultDailyLimit,
+  isMailboxProviderType,
+} from "@/lib/email/mailbox-providers";
 import {
   exchangeCode,
   fetchAccountEmail,
@@ -83,6 +86,9 @@ export async function GET(
       .maybeSingle();
 
     if (existing) {
+      // Reconnect: refresh the credentials only. daily_limit is deliberately
+      // left alone — the user may have tuned it, and silently resetting their
+      // cap because a token expired would be a surprising side effect.
       const { error } = await supabase
         .from("mailboxes")
         .update(row)
@@ -93,6 +99,10 @@ export async function GET(
         org_id: org.id,
         user_id: user.id,
         display_name: email.split("@")[0],
+        // Start under the account's real provider quota rather than the table
+        // default of 200 — which is both far too low for a Workspace account
+        // and, on some providers, too high for a free one.
+        daily_limit: defaultDailyLimit(provider, email),
         ...row,
       });
       if (error) return fail("save");

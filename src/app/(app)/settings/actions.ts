@@ -12,8 +12,14 @@ import {
   type MailboxSender,
 } from "@/lib/email/send";
 import { decryptToken } from "@/lib/email/mailbox-crypto";
+import { recordSendUsage } from "@/lib/email/send-cap";
 import { revokeMailboxAccess } from "@/lib/email/mailbox-oauth";
-import { isMailboxProviderType } from "@/lib/email/mailbox-providers";
+import {
+  dailyLimitCeiling,
+  isMailboxProviderType,
+  MAILBOX_PROVIDERS,
+  mailboxProviderLabel,
+} from "@/lib/email/mailbox-providers";
 
 export type MailboxState = {
   ok?: boolean;
@@ -38,6 +44,26 @@ export async function addMailbox(
   );
 
   if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address.", field: "email" };
+
+  // An address-only mailbox sends through the global delivery provider, which
+  // will only accept a domain the org has verified with it. Nobody can verify
+  // gmail.com or outlook.com, so this row could never send — the provider
+  // returns a 403 on the first attempt and the mailbox sits there looking
+  // configured. Refuse it here and point at the flow that does work: connecting
+  // the account itself, which sends through the provider's own API and needs no
+  // domain verification.
+  const personal = MAILBOX_PROVIDERS.find((p) =>
+    p.quota.personalDomains.includes(email.split("@")[1]?.toLowerCase() ?? "")
+  );
+  if (personal) {
+    return {
+      field: "email",
+      error:
+        `${mailboxProviderLabel(personal.type)} addresses can't be added this way — ` +
+        `a delivery provider will reject them because nobody can verify that domain. ` +
+        `Use "Connect ${personal.label}" instead to send through the account itself.`,
+    };
+  }
 
   const { error } = await supabase.from("mailboxes").insert({
     org_id: org.id,
@@ -107,7 +133,7 @@ export async function sendMailboxTest(id: string): Promise<MailboxState> {
 
   const { data: row } = await supabase
     .from("mailboxes")
-    .select(`email, display_name, ${MAILBOX_SENDER_COLUMNS}`)
+    .select(`email, display_name, connect_error, ${MAILBOX_SENDER_COLUMNS}`)
     .eq("id", id)
     .eq("org_id", org.id)
     .maybeSingle();
@@ -116,6 +142,7 @@ export async function sendMailboxTest(id: string): Promise<MailboxState> {
   const mailbox = row as MailboxSender & {
     email: string;
     display_name: string | null;
+    connect_error: string | null;
   };
 
   // Check authentication first so an expired connection reports "reconnect"
@@ -161,15 +188,72 @@ export async function sendMailboxTest(id: string): Promise<MailboxState> {
   if (res.status === "failed")
     return { error: res.error || "The provider rejected the test send." };
 
-  // A successful send proves the connection: clear any stale warning so the
-  // Reconnect prompt doesn't linger after the user has fixed things.
-  if (isConnectedMailbox(mailbox)) {
+  // Counted but not capped — the provider charged this message against the
+  // account's daily quota, so our number has to know about it too. See
+  // recordSendUsage.
+  if (isConnectedMailbox(mailbox))
+    await recordSendUsage(supabase, { orgId: org.id, mailboxId: id });
+
+  // A successful send proves the mailbox works: clear any stale warning so it
+  // doesn't linger after the user has fixed things. Not limited to connected
+  // accounts — `markError` writes connect_error for an address-only row too
+  // (that's how the delivery provider's "domain is not verified" 403 gets
+  // recorded), and leaving that behind after a passing test would be reporting
+  // a fault we just disproved.
+  if (mailbox.connect_error) {
     await supabase
       .from("mailboxes")
       .update({ connect_error: null })
       .eq("id", id)
       .eq("org_id", org.id);
   }
+
+  revalidatePath("/settings/mailboxes");
+  return { ok: true };
+}
+
+/**
+ * Change a mailbox's daily send cap.
+ *
+ * Until now the cap could only be chosen when an address-only mailbox was
+ * created, and never at all for a connected account — which meant a connected
+ * Gmail was stuck on whatever it was given at connect time, with no way to dial
+ * it back after a deliverability scare or up after the domain warmed.
+ *
+ * For a connected account the value is clamped to the provider's own ceiling:
+ * above it the provider simply starts rejecting messages, so a higher number
+ * would not buy more sends, it would only move the failure from our orderly
+ * pause to a mid-sequence provider error.
+ */
+export async function updateMailboxLimit(
+  id: string,
+  limit: number
+): Promise<MailboxState> {
+  const { supabase, org } = await requireContext();
+  if (!["owner", "admin"].includes(org.role))
+    return { error: "Only workspace admins can change a mailbox." };
+
+  const { data: row } = await supabase
+    .from("mailboxes")
+    .select("id, provider, oauth_email")
+    .eq("id", id)
+    .eq("org_id", org.id)
+    .maybeSingle();
+  if (!row) return { error: "That mailbox no longer exists." };
+
+  const m = row as { provider: string; oauth_email: string | null };
+  let daily_limit = Math.max(1, Math.floor(Number(limit) || 0));
+  if (m.oauth_email && isMailboxProviderType(m.provider)) {
+    const ceiling = dailyLimitCeiling(m.provider, m.oauth_email);
+    if (daily_limit > ceiling) daily_limit = ceiling;
+  }
+
+  const { error } = await supabase
+    .from("mailboxes")
+    .update({ daily_limit })
+    .eq("id", id)
+    .eq("org_id", org.id);
+  if (error) return { error: error.message };
 
   revalidatePath("/settings/mailboxes");
   return { ok: true };

@@ -12,7 +12,9 @@ import {
   offeredMailboxProviders,
   mailboxProviderLabel,
   isMailboxProviderType,
+  dailyLimitCeiling,
 } from "@/lib/email/mailbox-providers";
+import { sendsToday } from "@/lib/email/send-cap";
 import { isMailboxProviderConfigured } from "@/lib/email/mailbox-oauth";
 import type { Mailbox } from "@/lib/types";
 
@@ -52,6 +54,25 @@ export default async function MailboxesSettingsPage({
     .filter((p) => isMailboxProviderConfigured(p.type))
     .map((p) => ({ type: p.type, label: p.label, description: p.description, chip: p.chip }));
 
+  const rows = (mailboxes ?? []) as Mailbox[];
+
+  // Today's usage per mailbox, so a row can say "412 of 500 sent today" rather
+  // than only advertising a limit the user has no way to see themselves against.
+  const usage = await sendsToday(
+    supabase,
+    org.id,
+    rows.map((m) => m.id)
+  );
+
+  // The provider's hard ceiling, for connected accounts only — it's what the
+  // limit editor clamps to and explains. An address-only row has no such
+  // ceiling; its delivery provider's limits aren't per-mailbox.
+  const ceilings: Record<string, number> = {};
+  for (const m of rows) {
+    if (m.oauth_email && isMailboxProviderType(m.provider))
+      ceilings[m.id] = dailyLimitCeiling(m.provider, m.oauth_email);
+  }
+
   const sp = (await searchParams) ?? {};
   const connected = typeof sp.mailbox_connected === "string" ? sp.mailbox_connected : null;
   const errorParam = typeof sp.mailbox_error === "string" ? sp.mailbox_error : null;
@@ -76,9 +97,11 @@ export default async function MailboxesSettingsPage({
       </CardHeader>
       <CardContent>
         <Mailboxes
-          mailboxes={(mailboxes ?? []) as Mailbox[]}
+          mailboxes={rows}
           deliveryProvider={getEmailProvider().name}
           connectable={connectable}
+          usage={usage}
+          ceilings={ceilings}
           canManage={canManage}
           banner={banner}
         />
