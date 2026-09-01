@@ -142,6 +142,9 @@ async function recordBounce(
     .update({ status: "stopped", ended_at: new Date().toISOString() })
     .eq("contact_id", reply.contactId)
     .eq("status", "active");
+}
+
+/**
  * Resolve which thread a reply belongs to from its In-Reply-To / References
  * chain: any id in the chain that we sent identifies the thread exactly, even
  * if the contact has since been merged or the reply came from an alias. Returns
