@@ -351,6 +351,8 @@ export type Message = {
   /** The Message-ID this one replies to, bare — null for a thread's first. */
   in_reply_to: string | null;
   campaign_id: string | null;
+  /** Set when a workflow's send_email node produced this message. */
+  workflow_id: string | null;
   created_at: string;
 };
 

@@ -21,6 +21,7 @@ import {
 import { renderTemplate, withUnsubscribe } from "@/lib/email/template";
 import { resolveBookingLink } from "@/lib/email/booking-link";
 import { wrapEmail } from "@/lib/email/layout";
+import { recordOutboundMessage } from "@/lib/inbox/outbound";
 import {
   withOpenPixel,
   withClickTracking,
@@ -452,6 +453,23 @@ export const campaignEngine = inngest.createFunction(
             mailbox_id: ctx.mailbox?.id ?? null,
           },
         });
+        // Also land the send in the contact's Inbox thread, so the campaign
+        // email reads as a message bubble next to the replies it draws rather
+        // than as a bare "Email sent" line. The body is re-rendered here
+        // deliberately: the delivered one carries the open pixel and rewritten
+        // click links, and the thread renders outbound HTML live.
+        if (res.status === "sent") {
+          await recordOutboundMessage(admin, {
+            orgId: ctx.orgId,
+            contactId: ctx.contact!.id,
+            from,
+            to: ctx.contact!.email!,
+            subject: renderTemplate(s.subject ?? "", merge),
+            bodyHtml: renderTemplate(s.body ?? "", merge),
+            providerMessageId: res.id,
+            campaignId: ctx.campaignId,
+          });
+        }
       });
 
       await step.run(`advance-${i}`, async () => {
@@ -1026,6 +1044,25 @@ export const workflowRun = inngest.createFunction(
             workflow_node_id: node.id,
             metadata: { message_id: res.id, error: res.error ?? null },
           });
+          // Mirror the send into the contact's Inbox thread. The stored body is
+          // the bare rendered one — `outcome.send.html` is the delivered
+          // version, wrapped in the email shell with an unsubscribe footer,
+          // which does not belong in a CRM thread.
+          if (res.status === "sent") {
+            await recordOutboundMessage(admin, {
+              orgId,
+              contactId: contact.id,
+              from: outcome.send!.from,
+              to: outcome.send!.to,
+              subject: outcome.send!.subject,
+              bodyHtml: renderTemplate(
+                String(node.data.config?.body ?? ""),
+                merge
+              ),
+              providerMessageId: res.id,
+              workflowId,
+            });
+          }
           if (outcome.rsId) {
             await admin
               .from("workflow_run_steps")
