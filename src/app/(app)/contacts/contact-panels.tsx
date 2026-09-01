@@ -18,6 +18,7 @@ import { formatAddress } from "@/lib/types";
 import type { ContactProfile } from "./actions";
 import { ActivityComposer } from "./[id]/activity-composer";
 import { ActivityItem } from "./[id]/activity-item";
+import { MessageItem } from "./[id]/message-item";
 import { statusLabel } from "@/lib/utils";
 
 /**
@@ -271,6 +272,11 @@ export function RelationshipPanels({ profile }: { profile: ContactProfile }) {
 /**
  * Activity, with the composer and per-item controls.
  *
+ * Logged activities and Inbox emails are interleaved into one list, newest
+ * first. Keeping them apart would have meant an "Activity" panel that omitted
+ * every email the contact actually sent or received — which is most of what a
+ * timeline is for.
+ *
  * `onChanged` exists for the side sheet: the composer and items call
  * `router.refresh()`, which re-renders server components but does nothing for
  * the sheet's client-side `getContactProfile` fetch. The sheet passes a
@@ -285,16 +291,34 @@ export function ActivityPanel({
   profile: ContactProfile;
   onChanged?: () => void;
 }) {
+  const entries = React.useMemo(() => {
+    const merged = [
+      ...profile.activities.map((a) => ({
+        key: `a-${a.id}`,
+        at: a.created_at,
+        node: <ActivityItem activity={a} onChanged={onChanged} />,
+      })),
+      ...profile.messages.map((m) => ({
+        key: `m-${m.id}`,
+        at: m.created_at,
+        node: <MessageItem message={m} />,
+      })),
+    ];
+    return merged.sort(
+      (x, y) => new Date(y.at).getTime() - new Date(x.at).getTime()
+    );
+  }, [profile.activities, profile.messages, onChanged]);
+
   return (
     <Section
       title="Activity"
-      count={profile.activities.length}
+      count={entries.length}
       action={<ActivityComposer contactId={contactId} onSaved={onChanged} />}
     >
-      {profile.activities.length ? (
+      {entries.length ? (
         <ul className="divide-y">
-          {profile.activities.map((a) => (
-            <ActivityItem key={a.id} activity={a} onChanged={onChanged} />
+          {entries.map((e) => (
+            <React.Fragment key={e.key}>{e.node}</React.Fragment>
           ))}
         </ul>
       ) : (

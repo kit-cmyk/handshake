@@ -31,7 +31,12 @@ export type DealContactOption = {
   companyId: string | null;
 };
 
-export type DealTimelineKind = "activity" | "campaign" | "workflow" | "stage";
+export type DealTimelineKind =
+  | "activity"
+  | "message"
+  | "campaign"
+  | "workflow"
+  | "stage";
 
 export type DealTimelineItem = {
   id: string;
@@ -113,6 +118,7 @@ export async function getDealProfile(id: string): Promise<DealProfile | null> {
     { data: enrollments },
     { data: runs },
     { data: stageEvents },
+    { data: messages },
   ] = await Promise.all([
     supabase
       .from("activities")
@@ -155,6 +161,19 @@ export async function getDealProfile(id: string): Promise<DealProfile | null> {
       .eq("type", "stage_moved")
       .eq("metadata->>deal_id", id)
       .order("occurred_at", { ascending: false }),
+    // Inbox email for the same contacts. Scoped to contacts rather than the
+    // deal because a message hangs off a contact, not a deal — the same reason
+    // the activity query above widens to the company's contacts.
+    contactIdArr.length
+      ? supabase
+          .from("messages")
+          .select(
+            "id, created_at, direction, subject, snippet, campaign_id, workflow_id"
+          )
+          .eq("org_id", org.id)
+          .in("contact_id", contactIdArr)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as unknown[] }),
   ]);
 
   const timeline: DealTimelineItem[] = [];
@@ -187,6 +206,21 @@ export async function getDealProfile(id: string): Promise<DealProfile | null> {
       activityType: null,
       title: `Entered ${joinedName(r.workflows) ?? "a workflow"}`,
       subtitle: `Workflow · ${r.status as string}`,
+    });
+  }
+  for (const m of (messages ?? []) as Record<string, unknown>[]) {
+    const outbound = m.direction === "outbound";
+    const via = m.campaign_id ? " · campaign" : m.workflow_id ? " · workflow" : "";
+    timeline.push({
+      id: `m-${m.id as string}`,
+      at: m.created_at as string,
+      kind: "message",
+      activityType: null,
+      title:
+        (m.subject as string | null) ||
+        (m.snippet as string | null) ||
+        "(no subject)",
+      subtitle: `${outbound ? "Email sent" : "Email received"}${via}`,
     });
   }
   for (const s of (stageEvents ?? []) as Record<string, unknown>[]) {

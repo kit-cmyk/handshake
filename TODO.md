@@ -3,50 +3,36 @@
 Running log of deferred work and future features for this project. Add new items
 here rather than leaving "Coming soon"/placeholder UI in the app.
 
-## Database
-
-- [x] **Apply migration `0016_contact_fields.sql`** — `lead_source`, `address`,
-  `appointment_date` on `contacts`. Applied.
-- [x] **Apply migration `0017_contact_address.sql`** — structured,
-  international address columns (`address_line2`, `city`, `region`,
-  `postal_code`, `country`) on `contacts`. Applied.
-- [x] **Apply migration `0018_company_geo.sql`** — `latitude`/`longitude` on
-  `companies` for map plotting and radius search on the Find leads page
-  (`/leads`). Applied.
-- [x] **Apply migration `0019_deal_detail.sql`** — `service`, `description`,
-  `priority` on `deals` + the `appointment` activity type. Applied.
-- [x] **Apply migration `0020_inbox.sql`** — `conversations`, `messages`,
-  `conversation_reads` (with an updated-conversation trigger and org-scoped RLS)
-  that back the new Inbox. Applied.
-- [x] **Apply migration `0021_stage_lifecycle.sql`** — adds the `lifecycle_stage`
-  column on `stages` (the configurable stage→lifecycle mapping), backfills
-  existing stages by name, and updates `create_org_with_owner` to seed it.
-  Applied.
-- [x] **Apply migration `0023_campaign_audience.sql`** — `audience_mode`
-  (`segment` | `contacts` | `import`) and `send_delay_minutes` on `campaigns`,
-  backing the 5-step campaign wizard's audience choice and the "At delay" send
-  time. Applied.
-
 ## Inbox
 
-- [ ] **Campaign/workflow sends as message bubbles** — one-off emails sent from
-  the Inbox and inbound replies render as chat bubbles, but automated campaign
-  and workflow sends appear only as "Email sent" system lines (derived from
-  `events`), not bubbles. To unify the thread, have the Inngest send path
-  (`src/lib/inngest/functions.ts`) also upsert a conversation + insert an
-  outbound `messages` row on each send. Deferred to keep the sending engine
-  untouched in the first cut.
-- [ ] **Surface inbox messages on the contact/deal detail timelines** — the
-  contact detail page (`src/app/(app)/contacts/[id]/page.tsx`) and deal side
-  sheet read `activities` only, so emails sent/received via the Inbox (stored in
-  `messages`) don't appear there yet. Merge `messages` into those timelines the
-  same way the Inbox does (`src/lib/inbox/timeline.ts`).
-- [ ] **Real inbound-parse wiring** — the inbound webhook now captures message
+- [x] **Campaign/workflow sends as message bubbles** — both Inngest engines now
+  record the send into the contact's thread via `recordOutboundMessage`
+  (`src/lib/inbox/outbound.ts`), which finds or opens the conversation and
+  inserts an outbound `messages` row. The stored body is the *untracked* render
+  — no open pixel, no rewritten click links, no unsubscribe footer — because the
+  pane renders outbound HTML live and the delivered version would have made a
+  teammate reading the thread count as the recipient opening the email. The
+  `sent` event is still written for the funnel; `buildTimeline` collapses it into
+  the bubble by matching `provider_message_id`, so older sends with no message
+  row keep their system line. Requires `0046_message_workflow.sql`.
+- [x] **Surface inbox messages on the contact/deal detail timelines** —
+  `getContactProfile` returns `messages` and the Activity panel interleaves them
+  with activities newest-first (`MessageItem`); the deal side sheet gained a
+  `message` timeline kind fed by the same contacts its activity query covers.
+- [ ] **Real inbound-parse wiring** — the inbound webhook captures message
   bodies when a provider forwards the parsed email (`from`/`subject`/`text`/
   `html`), including a cold-inbound match by sender email. Configure the mail
   provider's inbound-parse (or an IMAP poller) to POST that payload to
-  `/api/webhooks/inbound`. Cold matches are by first contact with that email;
-  revisit if the same address exists across multiple orgs.
+  `/api/webhooks/inbound`. Provisioning, not code. Cold matches are by first
+  contact with that email; revisit if the same address exists across multiple
+  orgs.
+- [ ] **Thread automated sends in the recipient's mail client** — one-off inbox
+  sends mint a Message-ID and carry In-Reply-To/References
+  (`src/lib/inbox/threading.ts`), so a reply lands back in the same thread.
+  Campaign and workflow sends don't: their `messages` rows have a null
+  `message_id`, so an inbound reply to one resolves by sender-email match rather
+  than by header chain. Mint the headers in the engines the way `deliverEmail`
+  does and pass them through to the message row.
 
 ## Find leads / prospecting
 
@@ -82,8 +68,7 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   `moveDeal`/`saveDeal`). Each stage carries a `lifecycle_stage` column
   (migration `0021_stage_lifecycle.sql`) that is the source of truth; it's edited
   per stage in **Settings → Pipeline**. Unmapped stages fall back to name
-  matching, and if still no match the contact is left untouched. Requires
-  applying `0021_stage_lifecycle.sql` (see Database).
+  matching, and if still no match the contact is left untouched.
 - [ ] **Full pipeline/stage editing** — stages can be *mapped* to a lifecycle in
   Settings → Pipeline, but not yet renamed/added/removed/reordered, and there's
   still only one pipeline per org (seeded by `create_org_with_owner`). Add stage

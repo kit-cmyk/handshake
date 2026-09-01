@@ -8,6 +8,7 @@ import {
   type Activity,
   type ContactWithCompany,
   type LifecycleStage,
+  type Message,
 } from "@/lib/types";
 
 export type FormState = {
@@ -21,6 +22,12 @@ export type FormState = {
 export type ContactProfile = {
   contact: ContactWithCompany;
   activities: Activity[];
+  /**
+   * Emails sent to and received from this contact via the Inbox. Kept separate
+   * from `activities` because they are a different shape; the Activity panel
+   * interleaves the two into one chronological list.
+   */
+  messages: Message[];
   campaigns: {
     id: string;
     status: string;
@@ -59,6 +66,7 @@ export async function getContactProfile(
 
   const [
     { data: activities },
+    { data: messages },
     { data: enrollments },
     { data: runs },
     { data: members },
@@ -66,6 +74,11 @@ export async function getContactProfile(
   ] = await Promise.all([
     supabase
       .from("activities")
+      .select("*")
+      .eq("contact_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("messages")
       .select("*")
       .eq("contact_id", id)
       .order("created_at", { ascending: false }),
@@ -97,6 +110,7 @@ export async function getContactProfile(
   return {
     contact: contact as ContactWithCompany,
     activities: (activities ?? []) as Activity[],
+    messages: (messages ?? []) as Message[],
     campaigns: (enrollments ?? []).map((e) => ({
       id: e.id as string,
       status: e.status as string,
