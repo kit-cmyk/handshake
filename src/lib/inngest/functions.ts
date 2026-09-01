@@ -12,6 +12,10 @@ import {
 } from "@/lib/segments";
 import { defaultFrom } from "@/lib/email/provider";
 import {
+  reserveSendSlot,
+  minutesUntilCounterReset,
+} from "@/lib/email/send-cap";
+import {
   sendViaMailbox,
   revalidateMailbox,
   isRetryableSendFailure,
@@ -39,8 +43,19 @@ import {
   nextNodeId,
   evaluateBranch,
 } from "@/lib/workflows";
+import {
+  lookupCompanyLinkedIn,
+  lookupPersonLinkedIn,
+} from "@/lib/enrichment/linkedin-lookup";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "@/lib/types";
 import { nextSendTime, ALWAYS_ON, type SendWindow } from "@/lib/schedule";
+
+/** Records per LinkedIn backfill event — keeps a single run bounded. */
+const LINKEDIN_BATCH = 25;
+/** Records of each kind the nightly sweep queues per run, across all orgs. */
+const LINKEDIN_SWEEP_LIMIT = 200;
+/** Don't retry a record that already came up empty until this many days pass. */
+const LINKEDIN_RETRY_DAYS = 30;
 
 /** Read an org's configured send window (falls back to always-on). */
 async function loadSendWindow(
@@ -309,25 +324,17 @@ export const campaignEngine = inngest.createFunction(
       // cap. Protects sender reputation on large enrollments.
       if (ctx.mailbox && ctx.mailbox.daily_limit > 0) {
         for (let attempt = 0; attempt < 90; attempt++) {
-          const reserved = await step.run(`cap-reserve-${i}-${attempt}`, async () => {
-            const { data, error } = await admin.rpc("reserve_mailbox_send", {
-              p_org: ctx.orgId,
-              p_mailbox: ctx.mailbox!.id,
-              p_limit: ctx.mailbox!.daily_limit,
-            });
-            // Fail open on a counter error — never block a legitimate send.
-            if (error) return true;
-            return data as boolean;
-          });
+          const reserved = await step.run(`cap-reserve-${i}-${attempt}`, () =>
+            reserveSendSlot(admin, {
+              orgId: ctx.orgId,
+              mailboxId: ctx.mailbox!.id,
+              limit: ctx.mailbox!.daily_limit,
+            })
+          );
           if (reserved) break;
-          const waitMinutes = await step.run(`cap-wait-calc-${i}-${attempt}`, async () => {
-            const now = new Date();
-            const startOfDay = new Date(
-              Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-            );
-            const nextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-            return Math.max(1, Math.ceil((nextDay.getTime() - now.getTime()) / 60000));
-          });
+          const waitMinutes = await step.run(`cap-wait-calc-${i}-${attempt}`, async () =>
+            minutesUntilCounterReset()
+          );
           await step.sleep(`cap-wait-${i}-${attempt}`, `${waitMinutes}m`);
         }
       }
@@ -539,14 +546,16 @@ export const workflowRun = inngest.createFunction(
       // A workflow sends through a single mailbox, so its sending identity is
       // fixed for the whole run — resolve it once for the {{sender_*}} tokens.
       let sender: {
+        id: string;
         email: string;
         display_name: string | null;
         user_id: string | null;
+        daily_limit: number;
       } | null = null;
       if (wf?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("email, display_name, user_id")
+          .select("id, email, display_name, user_id, daily_limit")
           .eq("id", wf.mailbox_id)
           .single();
         sender = data;
@@ -977,6 +986,35 @@ export const workflowRun = inngest.createFunction(
       // Isolated, non-idempotent send. Once it succeeds Inngest memoizes it, so
       // a failure in the record step only retries the record — never the send.
       if ("send" in outcome && outcome.send) {
+        // Same daily cap the campaign engine honors. A workflow sends through
+        // the same mailbox — and, when that mailbox is a connected Gmail /
+        // Outlook account, against the same provider quota — so leaving this
+        // path uncapped let a busy workflow spend the day's allowance and push
+        // the account into provider rejections. Over cap, sleep to the UTC
+        // rollover and retry rather than dropping the email.
+        if (ctx.sender && ctx.sender.daily_limit > 0) {
+          for (let attempt = 0; attempt < 90; attempt++) {
+            const reserved = await step.run(
+              `node-cap-reserve-${node.id}-${attempt}`,
+              () =>
+                reserveSendSlot(admin, {
+                  orgId,
+                  mailboxId: ctx.sender!.id,
+                  limit: ctx.sender!.daily_limit,
+                })
+            );
+            if (reserved) break;
+            const waitMinutes = await step.run(
+              `node-cap-wait-calc-${node.id}-${attempt}`,
+              async () => minutesUntilCounterReset()
+            );
+            await step.sleep(
+              `node-cap-wait-${node.id}-${attempt}`,
+              `${waitMinutes}m`
+            );
+          }
+        }
+
         // Respect the org's send window before dispatching the email.
         const windowWaitUntil = await step.run(
           `node-window-${node.id}`,
@@ -1608,6 +1646,179 @@ export const mailboxHealthCheck = inngest.createFunction(
   },
 );
 
+// ---- LinkedIn backfill ------------------------------------------------------
+
+/**
+ * Second-pass LinkedIn discovery for records Find leads couldn't resolve.
+ *
+ * Search-time enrichment only reads a company's homepage, and people providers
+ * only hand back a profile when their own data has one — so records routinely
+ * land with linkedin_url null. This job crawls the prospect's site properly
+ * (about/contact/team pages) and, if a search backend is configured, searches
+ * the web. See lib/enrichment/linkedin-lookup.
+ *
+ * It runs outside the request: importing 60 companies would otherwise mean
+ * hundreds of page fetches while the user waits on a "Add to Companies" click.
+ *
+ * Every attempt stamps linkedin_lookup_at whether or not it found anything,
+ * which is what stops the nightly sweep re-crawling the same dead ends forever.
+ */
+export const linkedinBackfill = inngest.createFunction(
+  {
+    id: "linkedin-backfill",
+    triggers: [{ event: "enrichment/linkedin.backfill" }],
+    // One record at a time per org, and a ceiling on how fast we hit the open
+    // web: this job fetches third-party sites, so politeness matters more than
+    // throughput. Nothing downstream is waiting on it.
+    concurrency: [{ limit: 4, scope: "account" }],
+    throttle: { limit: 120, period: "1m" },
+    retries: 1,
+  },
+  async ({ event, step }) => {
+    const admin = createAdminClient();
+    const { orgId, kind, ids } = event.data as {
+      orgId: string;
+      kind: "companies" | "contacts";
+      ids: string[];
+    };
+    if (!orgId || !ids?.length) return { skipped: true };
+
+    // Cap per event so one huge import can't produce an unbounded run; the
+    // nightly sweep picks up whatever spills over.
+    const batch = ids.slice(0, LINKEDIN_BATCH);
+    let found = 0;
+    let missed = 0;
+
+    for (const id of batch) {
+      // One step per record: a flaky site retries just that record, and records
+      // already resolved on an earlier attempt aren't re-crawled.
+      const result = await step.run(`lookup-${id}`, async () => {
+        if (kind === "companies") {
+          const { data } = await admin
+            .from("companies")
+            .select("id, name, website, city, linkedin_url")
+            .eq("id", id)
+            .eq("org_id", orgId)
+            .maybeSingle();
+          const co = data as {
+            name: string;
+            website: string | null;
+            city: string | null;
+            linkedin_url: string | null;
+          } | null;
+          // Re-check under the job: the user may have filled it in by hand, or
+          // an earlier attempt may have won the race.
+          if (!co || co.linkedin_url) return { url: null, skipped: true };
+
+          const hit = await lookupCompanyLinkedIn({
+            name: co.name,
+            website: co.website,
+            city: co.city,
+          });
+          await admin
+            .from("companies")
+            .update({
+              ...(hit.url ? { linkedin_url: hit.url } : {}),
+              linkedin_lookup_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .eq("org_id", orgId)
+            .is("linkedin_url", null);
+          return { url: hit.url, source: hit.source, fetched: hit.fetched };
+        }
+
+        const { data } = await admin
+          .from("contacts")
+          .select(
+            "id, first_name, last_name, linkedin_url, companies(name, website)"
+          )
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .maybeSingle();
+        const c = data as {
+          first_name: string | null;
+          last_name: string | null;
+          linkedin_url: string | null;
+          companies: { name: string | null; website: string | null } | null;
+        } | null;
+        if (!c || c.linkedin_url) return { url: null, skipped: true };
+
+        const hit = await lookupPersonLinkedIn({
+          firstName: c.first_name,
+          lastName: c.last_name,
+          companyName: c.companies?.name ?? null,
+          companyWebsite: c.companies?.website ?? null,
+        });
+        await admin
+          .from("contacts")
+          .update({
+            ...(hit.url ? { linkedin_url: hit.url } : {}),
+            linkedin_lookup_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .is("linkedin_url", null);
+        return { url: hit.url, source: hit.source, fetched: hit.fetched };
+      });
+
+      if (result?.url) found++;
+      else missed++;
+    }
+
+    return { kind, checked: batch.length, found, missed };
+  },
+);
+
+/**
+ * Nightly sweep for anything the event-driven backfill never covered: records
+ * that predate this feature, arrived by CSV import or CRM sync, or whose first
+ * attempt failed. Oldest attempt first, nulls first.
+ */
+export const linkedinBackfillSweep = inngest.createFunction(
+  { id: "linkedin-backfill-sweep", triggers: [{ cron: "0 3 * * *" }] },
+  async ({ step }) => {
+    const admin = createAdminClient();
+    const cutoff = new Date(
+      Date.now() - LINKEDIN_RETRY_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const queued = await step.run("queue-pending", async () => {
+      const events: { name: string; data: Record<string, unknown> }[] = [];
+
+      for (const kind of ["companies", "contacts"] as const) {
+        const { data } = await admin
+          .from(kind)
+          .select("id, org_id")
+          .is("linkedin_url", null)
+          .or(`linkedin_lookup_at.is.null,linkedin_lookup_at.lt.${cutoff}`)
+          .order("linkedin_lookup_at", { ascending: true, nullsFirst: true })
+          .limit(LINKEDIN_SWEEP_LIMIT);
+
+        // Group by org so each event stays within one workspace.
+        const byOrg = new Map<string, string[]>();
+        for (const row of (data ?? []) as { id: string; org_id: string }[]) {
+          const list = byOrg.get(row.org_id) ?? [];
+          list.push(row.id);
+          byOrg.set(row.org_id, list);
+        }
+        for (const [orgId, ids] of byOrg) {
+          for (let i = 0; i < ids.length; i += LINKEDIN_BATCH) {
+            events.push({
+              name: "enrichment/linkedin.backfill",
+              data: { orgId, kind, ids: ids.slice(i, i + LINKEDIN_BATCH) },
+            });
+          }
+        }
+      }
+
+      if (events.length) await inngest.send(events);
+      return events.length;
+    });
+
+    return { batches: queued };
+  },
+);
+
 export const functions = [
   helloWorld,
   reevaluateSegments,
@@ -1621,4 +1832,6 @@ export const functions = [
   workflowActivityTrigger,
   workflowEmailOpened,
   workflowEmailClicked,
+  linkedinBackfill,
+  linkedinBackfillSweep,
 ];

@@ -174,6 +174,7 @@ export async function runImport(
         region: clean(r.region),
         postal_code: clean(r.postal_code),
         country: clean(r.country),
+        linkedin_url: clean(r.linkedin_url),
         company_id: cname ? companyByName.get(cname.toLowerCase()) ?? null : null,
       };
       const email = payload.email?.toLowerCase();

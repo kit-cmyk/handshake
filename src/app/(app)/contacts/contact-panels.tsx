@@ -12,6 +12,7 @@ import {
   CalendarPlus,
   UserRound,
   BellOff,
+  Link2,
 } from "lucide-react";
 import { Badge, CountBadge } from "@/components/ui/badge";
 import { formatAddress } from "@/lib/types";
@@ -119,6 +120,16 @@ export function UnsubscribeNotice({ at }: { at: string }) {
   );
 }
 
+/** `https://www.linkedin.com/in/jane-doe` → `in/jane-doe` — the URL is too long
+ * for the details column and the slug is the part that identifies the person. */
+function linkedinLabel(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/^\/|\/$/g, "") || url;
+  } catch {
+    return url;
+  }
+}
+
 export function DetailsPanel({
   profile,
   ownerName,
@@ -127,10 +138,22 @@ export function DetailsPanel({
   ownerName?: string | null;
 }) {
   const c = profile.contact;
-  const details = [
+  const details: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    value: string | null;
+    /** Renders the value as a link out when set. */
+    href?: string | null;
+  }[] = [
     { icon: Mail, label: "Email", value: c.email },
     { icon: Phone, label: "Phone", value: c.phone },
     { icon: Briefcase, label: "Title", value: c.title },
+    {
+      icon: Link2,
+      label: "LinkedIn",
+      value: c.linkedin_url ? linkedinLabel(c.linkedin_url) : null,
+      href: c.linkedin_url,
+    },
     { icon: Building2, label: "Company", value: c.companies?.name ?? null },
     { icon: UserRound, label: "Owner", value: ownerName ?? null },
     { icon: Radio, label: "Lead source", value: c.lead_source },
@@ -151,10 +174,21 @@ export function DetailsPanel({
             <d.icon className="size-4 shrink-0 text-muted-foreground" />
             <dt className="w-28 shrink-0 text-muted-foreground">{d.label}</dt>
             <dd className="flex-1 truncate">
-              {d.value || (
+              {!d.value ? (
                 <span className="text-muted-foreground">
                   {d.label === "Owner" ? "Unassigned" : "—"}
                 </span>
+              ) : d.href ? (
+                <a
+                  href={d.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {d.value}
+                </a>
+              ) : (
+                d.value
               )}
             </dd>
           </div>

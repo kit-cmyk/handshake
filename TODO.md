@@ -50,6 +50,19 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
 
 ## Find leads / prospecting
 
+- [ ] **Harden the LinkedIn backfill's search tier** — the background job
+  (`src/lib/inngest/functions.ts` → `linkedinBackfill`) crawls the prospect's own
+  site first, then falls back to a web search. With no `WEB_SEARCH_API_KEY` that
+  fallback scrapes DuckDuckGo's HTML endpoint, which can be throttled or blocked
+  and whose markup can change without notice (parser in
+  `src/lib/enrichment/web-search.ts`). Before relying on it at volume, put a real
+  search API behind it (Brave is already wired) or set
+  `LINKEDIN_LOOKUP_SEARCH=off` and accept site-crawl-only coverage.
+- [ ] **Surface backfill outcomes in the UI** — the job stamps
+  `linkedin_lookup_at` on every attempt and silently fills `linkedin_url` when it
+  finds one. There's no view of "looked up, found nothing", so a user can't tell
+  a not-yet-checked record from a checked-and-missing one. A column or filter on
+  Companies/Contacts would make that visible.
 - [ ] **People / demographic lead search** — the Find leads page currently
   searches *businesses* only (Google Places: category, location, radius,
   rating, has-website/phone, open-now). Person-level conditions (age, gender,
@@ -145,6 +158,17 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   revoke-on-disconnect, a "Send test" button, and a daily `mailbox-health-check`
   cron that surfaces a Reconnect prompt before a campaign fails on a dead
   mailbox. Remaining work is provisioning, not code — see the items below.
+- [x] **Internal daily cap now covers every send path** — done. The cap used to
+  be enforced only in `campaignEngine`, so a workflow's `send_email` node spent
+  the same mailbox's (and, for a connected account, the same provider's) quota
+  without ever booking it. Both engines now call the shared
+  `reserveSendSlot`/`minutesUntilCounterReset` in `src/lib/email/send-cap.ts`,
+  and the sends we deliberately *don't* block — a human's inbox reply, a mailbox
+  test — call `recordSendUsage` so our number tracks the provider's instead of
+  drifting above it (migration `0044_mailbox_send_quota.sql`). Connected
+  mailboxes get a provider-aware default cap at connect time (80% of the Gmail
+  500/2,000 or Outlook 300/2,000 ceiling), the limit is editable per mailbox and
+  clamped to that ceiling, and Settings shows "N of M sent today".
 - [ ] **Outlook is hidden pending its Azure app** — `offered: false` on the
   outlook entry in `src/lib/email/mailbox-providers.ts` keeps the whole Outlook
   implementation live (OAuth routes, refresh, sending) while withholding the

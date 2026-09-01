@@ -1,6 +1,9 @@
-// Best-effort email discovery: fetch a company's homepage and extract the first
-// plausible public email. Times out fast and never throws. Google Places does
-// not provide emails, so this is how scraped companies get a contact.
+// Best-effort contact discovery: fetch a company's homepage and extract the
+// first plausible public email and its LinkedIn page. Times out fast and never
+// throws. Google Places provides neither, so this is how scraped companies get
+// a contact address and a LinkedIn link.
+
+import { LINKEDIN_COMPANY_RE, normalizeLinkedIn } from "@/lib/linkedin";
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 // Skip asset filenames that look like emails and generic no-reply addresses.
@@ -48,21 +51,32 @@ function isPublicHttpUrl(raw: string): boolean {
   return true;
 }
 
-export async function discoverEmail(
-  website: string | null,
+/** What a single homepage fetch can yield. */
+export type SiteContact = {
+  email: string | null;
+  linkedinUrl: string | null;
+};
+
+/**
+ * Fetch a page as HTML text, or null if it can't be reached safely.
+ *
+ * Shared by every outbound scrape (homepage enrichment, the deeper LinkedIn
+ * crawl, search-engine lookups) so they all get the same SSRF guard: each
+ * redirect hop is re-validated, so a public URL can't 30x us onto an internal
+ * address. Never throws — a dead site is a normal outcome here.
+ */
+export async function fetchPublicPage(
+  rawUrl: string,
   timeoutMs = 4000
 ): Promise<string | null> {
-  if (!website) return null;
-  let url = website.trim();
+  let url = rawUrl.trim();
+  if (!url) return null;
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // Follow redirects manually, re-validating each hop so a public URL can't
-    // 30x-redirect us onto an internal address.
     let current = url;
-    let res: Response | null = null;
     for (let hop = 0; hop <= 3; hop++) {
       if (!isPublicHttpUrl(current)) return null;
       const r = await fetch(current, {
@@ -76,19 +90,60 @@ export async function discoverEmail(
         current = new URL(loc, current).toString();
         continue;
       }
-      res = r;
-      break;
+      if (!r.ok) return null;
+      return await r.text();
     }
-    if (!res || !res.ok) return null;
-    const html = await res.text();
-    const matches = html.match(EMAIL_RE) ?? [];
-    for (const m of matches) {
-      if (!SKIP.test(m)) return m.toLowerCase();
-    }
-    return null;
+    return null; // too many redirects
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** First plausible public email in a page's markup. */
+export function extractEmail(html: string): string | null {
+  for (const m of html.match(EMAIL_RE) ?? []) {
+    if (!SKIP.test(m)) return m.toLowerCase();
+  }
+  return null;
+}
+
+/** First LinkedIn *company* page linked from a page's markup. */
+export function extractCompanyLinkedIn(html: string): string | null {
+  for (const m of html.match(LINKEDIN_COMPANY_RE) ?? []) {
+    const normalized = normalizeLinkedIn(m);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+/**
+ * Fetch a company's homepage once and pull out both an email and a LinkedIn
+ * page. One fetch for both — these are looked up together at search time and
+ * the page visit is by far the expensive part.
+ *
+ * A miss here isn't final: plenty of sites only link their LinkedIn from an
+ * about/contact page, which the background backfill job crawls later
+ * (see lib/enrichment/linkedin-lookup).
+ */
+export async function discoverSiteContact(
+  website: string | null,
+  timeoutMs = 4000
+): Promise<SiteContact> {
+  if (!website) return { email: null, linkedinUrl: null };
+  const html = await fetchPublicPage(website, timeoutMs);
+  if (!html) return { email: null, linkedinUrl: null };
+  return {
+    email: extractEmail(html),
+    linkedinUrl: extractCompanyLinkedIn(html),
+  };
+}
+
+/** Email only — kept for callers that don't need the LinkedIn page. */
+export async function discoverEmail(
+  website: string | null,
+  timeoutMs = 4000
+): Promise<string | null> {
+  return (await discoverSiteContact(website, timeoutMs)).email;
 }

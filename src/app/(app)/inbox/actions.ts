@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import { inngest } from "@/lib/inngest/client";
 import { defaultFrom } from "@/lib/email/provider";
+import { recordSendUsage } from "@/lib/email/send-cap";
 import {
   sendViaMailbox,
   MAILBOX_SENDER_COLUMNS,
@@ -175,6 +176,19 @@ async function deliverEmail(params: {
     headers: threadHeaderFields(thread),
   });
   if (res.status === "failed") return res.error || "Failed to send email.";
+
+  // Book it against the mailbox's daily counter. Deliberately AFTER the send and
+  // without a limit check: a person's own reply is never refused because a
+  // campaign spent the day's budget. But a connected Gmail/Outlook account
+  // counts this message against the very quota our cap exists to stay under, so
+  // omitting it would let the two numbers drift apart until the provider — not
+  // us — started rejecting the campaign.
+  if (mailbox?.id) {
+    await recordSendUsage(params.supabase, {
+      orgId: params.orgId,
+      mailboxId: mailbox.id,
+    });
+  }
 
   // One-off sends are messages, not `sent` events, so they never double up with
   // the campaign funnel timeline lines. The conversation trigger bumps last_*.

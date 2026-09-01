@@ -3,7 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { Plus, Trash2, Mail, CheckCircle2, AlertTriangle, Send } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Mail,
+  CheckCircle2,
+  AlertTriangle,
+  Send,
+  Gauge,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,9 +26,15 @@ import {
 } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   addMailbox,
   deleteMailbox,
   sendMailboxTest,
+  updateMailboxLimit,
   type MailboxState,
 } from "./actions";
 import type { Mailbox } from "@/lib/types";
@@ -46,6 +60,92 @@ function providerLabel(provider: string, deliveryProvider: string): string {
   return PROVIDER_LABELS[effective] ?? effective;
 }
 
+/**
+ * Turn a stored `connect_error` into something a user can act on.
+ *
+ * The column holds whatever the provider said, verbatim — e.g. Resend's
+ * `403: {"statusCode":403,"message":"The gmail.com domain is not verified..."}`.
+ * Dumping raw JSON with a status code into settings tells the reader something
+ * is broken but not what to do about it, so the cases we recognise get a
+ * sentence instead. Anything unrecognised still shows through: a wrong
+ * explanation would be worse than an ugly true one.
+ */
+function explainConnectError(error: string, email: string): string {
+  if (/domain is not verified/i.test(error)) {
+    const domain = email.split("@")[1] ?? "this domain";
+    return `Your delivery provider won't send from ${domain} because that domain isn't verified with it. Connect this account directly, or use an address on a domain you've verified.`;
+  }
+  if (/^40[13]/.test(error))
+    return "The provider refused the last send from this mailbox. Reconnect it, or check the address is one it's allowed to send as.";
+  if (/reconnect|refresh failed/i.test(error))
+    return "Reconnect needed — sending is paused for this mailbox.";
+  return error;
+}
+
+/** Inline editor for a mailbox's daily send cap. */
+function DailyLimitEditor({
+  mailbox,
+  ceiling,
+  onSaved,
+}: {
+  mailbox: Mailbox;
+  /** Provider ceiling for a connected account; null when uncapped by a provider. */
+  ceiling: number | null;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [value, setValue] = React.useState(String(mailbox.daily_limit));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const res = await updateMailboxLimit(mailbox.id, Number(value));
+    setSaving(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setOpen(false);
+    onSaved();
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="text-xs">
+          <Gauge className="size-3.5" /> Limit
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor={`limit-${mailbox.id}`} className="text-sm">
+            Daily send limit
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {ceiling
+              ? `Handshake pauses this mailbox once it hits the limit and resumes at midnight UTC. ${mailbox.email.split("@")[1]} allows up to ${ceiling.toLocaleString()} a day; staying under it keeps sends from being rejected.`
+              : "Handshake pauses this mailbox once it hits the limit and resumes at midnight UTC."}
+          </p>
+        </div>
+        <Input
+          id={`limit-${mailbox.id}`}
+          type="number"
+          min={1}
+          max={ceiling ?? undefined}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <Button size="sm" onClick={save} disabled={saving} className="w-full">
+          {saving ? "Saving…" : "Save limit"}
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** A connectable OAuth mailbox provider whose app is configured on the server. */
 type ConnectableProvider = {
   type: string;
@@ -58,6 +158,8 @@ export function Mailboxes({
   mailboxes,
   deliveryProvider,
   connectable,
+  usage,
+  ceilings,
   canManage,
   banner,
 }: {
@@ -65,6 +167,10 @@ export function Mailboxes({
   /** Live global delivery provider name, e.g. "resend" or "mock". */
   deliveryProvider: string;
   connectable: ConnectableProvider[];
+  /** Sends already booked against each mailbox today (UTC), by mailbox id. */
+  usage: Record<string, number>;
+  /** Provider hard ceiling per connected mailbox id; absent = not provider-capped. */
+  ceilings: Record<string, number>;
   canManage: boolean;
   banner: { kind: "ok" | "error"; text: string } | null;
 }) {
@@ -128,9 +234,12 @@ export function Mailboxes({
         <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <p className="text-muted-foreground">
-            Email delivery is connected. Campaigns and workflows send from these
-            addresses — make sure each one is on a domain you&apos;ve verified
-            with your delivery provider.
+            Email delivery is connected. A <strong>connected</strong> Gmail or
+            Outlook account sends through the account itself, so it needs no
+            domain verification; any other address here goes through the shared
+            delivery provider and must be on a domain you&apos;ve verified with
+            it. Handshake keeps every mailbox under its own daily limit and
+            pauses it until midnight UTC when it&apos;s reached.
           </p>
         </div>
       ) : (
@@ -149,6 +258,8 @@ export function Mailboxes({
         <ul className="divide-y rounded-lg border">
           {mailboxes.map((m) => {
             const connected = !!m.oauth_email;
+            const sentToday = usage[m.id] ?? 0;
+            const atCap = m.daily_limit > 0 && sentToday >= m.daily_limit;
             return (
               <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
                 <Mail className="size-4 text-muted-foreground" />
@@ -158,12 +269,23 @@ export function Mailboxes({
                     {m.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {m.daily_limit}/day · {providerLabel(m.provider, deliveryProvider)}
+                    {sentToday > 0
+                      ? `${sentToday.toLocaleString()} of ${m.daily_limit.toLocaleString()} sent today`
+                      : `${m.daily_limit.toLocaleString()}/day`}{" "}
+                    · {providerLabel(m.provider, deliveryProvider)}
+                    {atCap && (
+                      <>
+                        {" · "}
+                        <span className="text-amber-600 dark:text-amber-400">
+                          daily limit reached, resumes at midnight UTC
+                        </span>
+                      </>
+                    )}
                   </p>
                   {m.connect_error && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                      <AlertTriangle className="size-3.5" />
-                      Reconnect needed — sending is paused for this mailbox.
+                    <p className="mt-1 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                      {explainConnectError(m.connect_error, m.email)}
                     </p>
                   )}
                   {testResult?.id === m.id && (
@@ -178,6 +300,13 @@ export function Mailboxes({
                     </p>
                   )}
                 </div>
+                {canManage && (
+                  <DailyLimitEditor
+                    mailbox={m}
+                    ceiling={ceilings[m.id] ?? null}
+                    onSaved={() => router.refresh()}
+                  />
+                )}
                 {canManage && (
                   <Button
                     variant="outline"
@@ -226,6 +355,15 @@ export function Mailboxes({
             );
           })}
         </ul>
+      )}
+
+      {canManage && connectable.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Connecting your own Gmail or Outlook account isn&apos;t available on
+          this server — its OAuth app isn&apos;t configured. Until it is, every
+          mailbox here sends through the shared delivery provider and must be on
+          a domain you&apos;ve verified with it.
+        </p>
       )}
 
       {canManage && connectable.length > 0 && (
@@ -279,8 +417,10 @@ export function Mailboxes({
             )}
             <p className="text-xs text-muted-foreground">
               Use an address on a domain you&apos;ve verified with your delivery
-              provider. The daily limit caps how many sends this identity makes
-              per day to protect sender reputation.
+              provider — a personal Gmail or Outlook address won&apos;t work here,
+              because that domain can&apos;t be verified. To send from one of
+              those, connect the account instead. The daily limit caps how many
+              sends this identity makes per day to protect sender reputation.
             </p>
             <SheetFooter>
               <Button type="submit" disabled={pending}>

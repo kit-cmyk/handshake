@@ -149,6 +149,16 @@ export function ContactForm({
       </div>
 
       <div className="space-y-2">
+        <Label htmlFor="linkedin_url">LinkedIn</Label>
+        <Input
+          id="linkedin_url"
+          name="linkedin_url"
+          placeholder="linkedin.com/in/jane-doe"
+          defaultValue={contact?.linkedin_url ?? ""}
+        />
+      </div>
+
+      <div className="space-y-2">
         <Label>Company</Label>
         <Select value={companyId} onValueChange={setCompanyId}>
           <SelectTrigger
