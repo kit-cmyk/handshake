@@ -145,6 +145,17 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
   revoke-on-disconnect, a "Send test" button, and a daily `mailbox-health-check`
   cron that surfaces a Reconnect prompt before a campaign fails on a dead
   mailbox. Remaining work is provisioning, not code — see the items below.
+- [x] **Internal daily cap now covers every send path** — done. The cap used to
+  be enforced only in `campaignEngine`, so a workflow's `send_email` node spent
+  the same mailbox's (and, for a connected account, the same provider's) quota
+  without ever booking it. Both engines now call the shared
+  `reserveSendSlot`/`minutesUntilCounterReset` in `src/lib/email/send-cap.ts`,
+  and the sends we deliberately *don't* block — a human's inbox reply, a mailbox
+  test — call `recordSendUsage` so our number tracks the provider's instead of
+  drifting above it (migration `0044_mailbox_send_quota.sql`). Connected
+  mailboxes get a provider-aware default cap at connect time (80% of the Gmail
+  500/2,000 or Outlook 300/2,000 ceiling), the limit is editable per mailbox and
+  clamped to that ceiling, and Settings shows "N of M sent today".
 - [ ] **Outlook is hidden pending its Azure app** — `offered: false` on the
   outlook entry in `src/lib/email/mailbox-providers.ts` keeps the whole Outlook
   implementation live (OAuth routes, refresh, sending) while withholding the

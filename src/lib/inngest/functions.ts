@@ -12,6 +12,10 @@ import {
 } from "@/lib/segments";
 import { defaultFrom } from "@/lib/email/provider";
 import {
+  reserveSendSlot,
+  minutesUntilCounterReset,
+} from "@/lib/email/send-cap";
+import {
   sendViaMailbox,
   revalidateMailbox,
   isRetryableSendFailure,
@@ -309,25 +313,17 @@ export const campaignEngine = inngest.createFunction(
       // cap. Protects sender reputation on large enrollments.
       if (ctx.mailbox && ctx.mailbox.daily_limit > 0) {
         for (let attempt = 0; attempt < 90; attempt++) {
-          const reserved = await step.run(`cap-reserve-${i}-${attempt}`, async () => {
-            const { data, error } = await admin.rpc("reserve_mailbox_send", {
-              p_org: ctx.orgId,
-              p_mailbox: ctx.mailbox!.id,
-              p_limit: ctx.mailbox!.daily_limit,
-            });
-            // Fail open on a counter error — never block a legitimate send.
-            if (error) return true;
-            return data as boolean;
-          });
+          const reserved = await step.run(`cap-reserve-${i}-${attempt}`, () =>
+            reserveSendSlot(admin, {
+              orgId: ctx.orgId,
+              mailboxId: ctx.mailbox!.id,
+              limit: ctx.mailbox!.daily_limit,
+            })
+          );
           if (reserved) break;
-          const waitMinutes = await step.run(`cap-wait-calc-${i}-${attempt}`, async () => {
-            const now = new Date();
-            const startOfDay = new Date(
-              Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-            );
-            const nextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-            return Math.max(1, Math.ceil((nextDay.getTime() - now.getTime()) / 60000));
-          });
+          const waitMinutes = await step.run(`cap-wait-calc-${i}-${attempt}`, async () =>
+            minutesUntilCounterReset()
+          );
           await step.sleep(`cap-wait-${i}-${attempt}`, `${waitMinutes}m`);
         }
       }
@@ -539,14 +535,16 @@ export const workflowRun = inngest.createFunction(
       // A workflow sends through a single mailbox, so its sending identity is
       // fixed for the whole run — resolve it once for the {{sender_*}} tokens.
       let sender: {
+        id: string;
         email: string;
         display_name: string | null;
         user_id: string | null;
+        daily_limit: number;
       } | null = null;
       if (wf?.mailbox_id) {
         const { data } = await admin
           .from("mailboxes")
-          .select("email, display_name, user_id")
+          .select("id, email, display_name, user_id, daily_limit")
           .eq("id", wf.mailbox_id)
           .single();
         sender = data;
@@ -977,6 +975,35 @@ export const workflowRun = inngest.createFunction(
       // Isolated, non-idempotent send. Once it succeeds Inngest memoizes it, so
       // a failure in the record step only retries the record — never the send.
       if ("send" in outcome && outcome.send) {
+        // Same daily cap the campaign engine honors. A workflow sends through
+        // the same mailbox — and, when that mailbox is a connected Gmail /
+        // Outlook account, against the same provider quota — so leaving this
+        // path uncapped let a busy workflow spend the day's allowance and push
+        // the account into provider rejections. Over cap, sleep to the UTC
+        // rollover and retry rather than dropping the email.
+        if (ctx.sender && ctx.sender.daily_limit > 0) {
+          for (let attempt = 0; attempt < 90; attempt++) {
+            const reserved = await step.run(
+              `node-cap-reserve-${node.id}-${attempt}`,
+              () =>
+                reserveSendSlot(admin, {
+                  orgId,
+                  mailboxId: ctx.sender!.id,
+                  limit: ctx.sender!.daily_limit,
+                })
+            );
+            if (reserved) break;
+            const waitMinutes = await step.run(
+              `node-cap-wait-calc-${node.id}-${attempt}`,
+              async () => minutesUntilCounterReset()
+            );
+            await step.sleep(
+              `node-cap-wait-${node.id}-${attempt}`,
+              `${waitMinutes}m`
+            );
+          }
+        }
+
         // Respect the org's send window before dispatching the email.
         const windowWaitUntil = await step.run(
           `node-window-${node.id}`,
