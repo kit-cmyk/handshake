@@ -20,6 +20,7 @@ import {
   Users,
   ExternalLink,
   Briefcase,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -239,13 +240,18 @@ function CompanySearch() {
                     <Mail className="size-4" /> Email
                   </label>
                   <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="has_linkedin" />
+                    <Link2 className="size-4" /> LinkedIn
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="open_now" />
                     Open now
                   </label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Email isn&apos;t in Google&apos;s data — we visit each site to
-                  find one, so this filter makes the search slower.
+                  Neither email nor LinkedIn is in Google&apos;s data — we visit
+                  each site to find them, so these filters make the search
+                  slower.
                 </p>
               </div>
             </div>
@@ -265,7 +271,7 @@ function CompanySearch() {
               </div>
               <label className="flex items-center gap-2 pb-2 text-sm">
                 <input type="checkbox" name="enrich" defaultChecked />
-                Find emails (visit websites)
+                Find emails &amp; LinkedIn (visit websites)
               </label>
               <Button type="submit" disabled={searching} className="ml-auto">
                 <Search className="size-4" />
@@ -388,6 +394,18 @@ function CompanySearch() {
                           )}
                           {r.website && <Globe className="size-3" />}
                           {r.email && <Mail className="size-3" />}
+                          {r.linkedinUrl && (
+                            <a
+                              href={r.linkedinUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={r.linkedinUrl}
+                              className="hover:text-foreground"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Link2 className="size-3" />
+                            </a>
+                          )}
                           {r.existing && (
                             <Badge variant="secondary" className="gap-1">
                               <Check className="size-3" /> In CRM
@@ -414,6 +432,13 @@ function CompanySearch() {
                 {(importResult.skipped ?? 0) > 0 && (
                   <Badge variant="secondary">
                     {importResult.skipped} already existed
+                  </Badge>
+                )}
+                {(importResult.linkedinPending ?? 0) > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Link2 className="size-3" />
+                    Finding LinkedIn for {importResult.linkedinPending} in the
+                    background
                   </Badge>
                 )}
                 <NavButton
@@ -581,6 +606,10 @@ function PeopleSearch() {
                 <input type="checkbox" name="has_email" defaultChecked />
                 <Mail className="size-4" /> Must have email
               </label>
+              <label className="flex items-center gap-2 pb-2 text-sm">
+                <input type="checkbox" name="has_linkedin" />
+                <Link2 className="size-4" /> Must have LinkedIn
+              </label>
               <Button type="submit" disabled={searching} className="ml-auto">
                 <Search className="size-4" />
                 {searching ? "Searching…" : "Search people"}
@@ -655,7 +684,18 @@ function PeopleSearch() {
                     <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                       {r.email && <Mail className="size-3" />}
                       {r.phone && <Phone className="size-3" />}
-                      {r.linkedinUrl && <ExternalLink className="size-3" />}
+                      {r.linkedinUrl && (
+                        <a
+                          href={r.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={r.linkedinUrl}
+                          className="flex items-center gap-0.5 hover:text-foreground"
+                        >
+                          <Link2 className="size-3" />
+                          <ExternalLink className="size-2.5" />
+                        </a>
+                      )}
                       {r.existing && (
                         <Badge variant="secondary" className="gap-1">
                           <Check className="size-3" /> In CRM
@@ -680,6 +720,13 @@ function PeopleSearch() {
                 {(importResult.skipped ?? 0) > 0 && (
                   <Badge variant="secondary">
                     {importResult.skipped} already existed
+                  </Badge>
+                )}
+                {(importResult.linkedinPending ?? 0) > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Link2 className="size-3" />
+                    Finding LinkedIn for {importResult.linkedinPending} in the
+                    background
                   </Badge>
                 )}
                 <NavButton

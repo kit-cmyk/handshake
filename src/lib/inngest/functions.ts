@@ -43,8 +43,19 @@ import {
   nextNodeId,
   evaluateBranch,
 } from "@/lib/workflows";
+import {
+  lookupCompanyLinkedIn,
+  lookupPersonLinkedIn,
+} from "@/lib/enrichment/linkedin-lookup";
 import { LIFECYCLE_STAGES, type LifecycleStage } from "@/lib/types";
 import { nextSendTime, ALWAYS_ON, type SendWindow } from "@/lib/schedule";
+
+/** Records per LinkedIn backfill event — keeps a single run bounded. */
+const LINKEDIN_BATCH = 25;
+/** Records of each kind the nightly sweep queues per run, across all orgs. */
+const LINKEDIN_SWEEP_LIMIT = 200;
+/** Don't retry a record that already came up empty until this many days pass. */
+const LINKEDIN_RETRY_DAYS = 30;
 
 /** Read an org's configured send window (falls back to always-on). */
 async function loadSendWindow(
@@ -1635,6 +1646,179 @@ export const mailboxHealthCheck = inngest.createFunction(
   },
 );
 
+// ---- LinkedIn backfill ------------------------------------------------------
+
+/**
+ * Second-pass LinkedIn discovery for records Find leads couldn't resolve.
+ *
+ * Search-time enrichment only reads a company's homepage, and people providers
+ * only hand back a profile when their own data has one — so records routinely
+ * land with linkedin_url null. This job crawls the prospect's site properly
+ * (about/contact/team pages) and, if a search backend is configured, searches
+ * the web. See lib/enrichment/linkedin-lookup.
+ *
+ * It runs outside the request: importing 60 companies would otherwise mean
+ * hundreds of page fetches while the user waits on a "Add to Companies" click.
+ *
+ * Every attempt stamps linkedin_lookup_at whether or not it found anything,
+ * which is what stops the nightly sweep re-crawling the same dead ends forever.
+ */
+export const linkedinBackfill = inngest.createFunction(
+  {
+    id: "linkedin-backfill",
+    triggers: [{ event: "enrichment/linkedin.backfill" }],
+    // One record at a time per org, and a ceiling on how fast we hit the open
+    // web: this job fetches third-party sites, so politeness matters more than
+    // throughput. Nothing downstream is waiting on it.
+    concurrency: [{ limit: 4, scope: "account" }],
+    throttle: { limit: 120, period: "1m" },
+    retries: 1,
+  },
+  async ({ event, step }) => {
+    const admin = createAdminClient();
+    const { orgId, kind, ids } = event.data as {
+      orgId: string;
+      kind: "companies" | "contacts";
+      ids: string[];
+    };
+    if (!orgId || !ids?.length) return { skipped: true };
+
+    // Cap per event so one huge import can't produce an unbounded run; the
+    // nightly sweep picks up whatever spills over.
+    const batch = ids.slice(0, LINKEDIN_BATCH);
+    let found = 0;
+    let missed = 0;
+
+    for (const id of batch) {
+      // One step per record: a flaky site retries just that record, and records
+      // already resolved on an earlier attempt aren't re-crawled.
+      const result = await step.run(`lookup-${id}`, async () => {
+        if (kind === "companies") {
+          const { data } = await admin
+            .from("companies")
+            .select("id, name, website, city, linkedin_url")
+            .eq("id", id)
+            .eq("org_id", orgId)
+            .maybeSingle();
+          const co = data as {
+            name: string;
+            website: string | null;
+            city: string | null;
+            linkedin_url: string | null;
+          } | null;
+          // Re-check under the job: the user may have filled it in by hand, or
+          // an earlier attempt may have won the race.
+          if (!co || co.linkedin_url) return { url: null, skipped: true };
+
+          const hit = await lookupCompanyLinkedIn({
+            name: co.name,
+            website: co.website,
+            city: co.city,
+          });
+          await admin
+            .from("companies")
+            .update({
+              ...(hit.url ? { linkedin_url: hit.url } : {}),
+              linkedin_lookup_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .eq("org_id", orgId)
+            .is("linkedin_url", null);
+          return { url: hit.url, source: hit.source, fetched: hit.fetched };
+        }
+
+        const { data } = await admin
+          .from("contacts")
+          .select(
+            "id, first_name, last_name, linkedin_url, companies(name, website)"
+          )
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .maybeSingle();
+        const c = data as {
+          first_name: string | null;
+          last_name: string | null;
+          linkedin_url: string | null;
+          companies: { name: string | null; website: string | null } | null;
+        } | null;
+        if (!c || c.linkedin_url) return { url: null, skipped: true };
+
+        const hit = await lookupPersonLinkedIn({
+          firstName: c.first_name,
+          lastName: c.last_name,
+          companyName: c.companies?.name ?? null,
+          companyWebsite: c.companies?.website ?? null,
+        });
+        await admin
+          .from("contacts")
+          .update({
+            ...(hit.url ? { linkedin_url: hit.url } : {}),
+            linkedin_lookup_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .is("linkedin_url", null);
+        return { url: hit.url, source: hit.source, fetched: hit.fetched };
+      });
+
+      if (result?.url) found++;
+      else missed++;
+    }
+
+    return { kind, checked: batch.length, found, missed };
+  },
+);
+
+/**
+ * Nightly sweep for anything the event-driven backfill never covered: records
+ * that predate this feature, arrived by CSV import or CRM sync, or whose first
+ * attempt failed. Oldest attempt first, nulls first.
+ */
+export const linkedinBackfillSweep = inngest.createFunction(
+  { id: "linkedin-backfill-sweep", triggers: [{ cron: "0 3 * * *" }] },
+  async ({ step }) => {
+    const admin = createAdminClient();
+    const cutoff = new Date(
+      Date.now() - LINKEDIN_RETRY_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const queued = await step.run("queue-pending", async () => {
+      const events: { name: string; data: Record<string, unknown> }[] = [];
+
+      for (const kind of ["companies", "contacts"] as const) {
+        const { data } = await admin
+          .from(kind)
+          .select("id, org_id")
+          .is("linkedin_url", null)
+          .or(`linkedin_lookup_at.is.null,linkedin_lookup_at.lt.${cutoff}`)
+          .order("linkedin_lookup_at", { ascending: true, nullsFirst: true })
+          .limit(LINKEDIN_SWEEP_LIMIT);
+
+        // Group by org so each event stays within one workspace.
+        const byOrg = new Map<string, string[]>();
+        for (const row of (data ?? []) as { id: string; org_id: string }[]) {
+          const list = byOrg.get(row.org_id) ?? [];
+          list.push(row.id);
+          byOrg.set(row.org_id, list);
+        }
+        for (const [orgId, ids] of byOrg) {
+          for (let i = 0; i < ids.length; i += LINKEDIN_BATCH) {
+            events.push({
+              name: "enrichment/linkedin.backfill",
+              data: { orgId, kind, ids: ids.slice(i, i + LINKEDIN_BATCH) },
+            });
+          }
+        }
+      }
+
+      if (events.length) await inngest.send(events);
+      return events.length;
+    });
+
+    return { batches: queued };
+  },
+);
+
 export const functions = [
   helloWorld,
   reevaluateSegments,
@@ -1648,4 +1832,6 @@ export const functions = [
   workflowActivityTrigger,
   workflowEmailOpened,
   workflowEmailClicked,
+  linkedinBackfill,
+  linkedinBackfillSweep,
 ];

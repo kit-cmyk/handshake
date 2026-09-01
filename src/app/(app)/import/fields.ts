@@ -28,6 +28,7 @@ export const CONTACT_FIELDS: FieldDef[] = [
   { key: "region", label: "State/Region" },
   { key: "postal_code", label: "Postal code" },
   { key: "country", label: "Country" },
+  { key: "linkedin_url", label: "LinkedIn" },
 ];
 
 export const COMPANY_FIELDS: FieldDef[] = [

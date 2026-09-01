@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
 import { inngest } from "@/lib/inngest/client";
+import { normalizeLinkedIn } from "@/lib/linkedin";
 import {
   LIFECYCLE_STAGES,
   type Activity,
@@ -149,6 +150,8 @@ export async function saveContact(
   const ownerField = fd.has("owner_id") ? str(fd, "owner_id") : undefined;
   const owner_id = id ? ownerField : (ownerField ?? userId);
 
+  const linkedin = str(fd, "linkedin_url");
+
   const payload = {
     org_id: org.id,
     first_name: str(fd, "first_name"),
@@ -156,6 +159,10 @@ export async function saveContact(
     email: str(fd, "email"),
     phone: str(fd, "phone"),
     title: str(fd, "title"),
+    // Canonicalize a recognisable LinkedIn URL so hand-typed and imported
+    // values match; keep anything else verbatim rather than silently binning
+    // what the user typed.
+    linkedin_url: linkedin ? normalizeLinkedIn(linkedin) ?? linkedin : null,
     company_id: str(fd, "company_id"),
     lifecycle_stage,
     lead_source: str(fd, "lead_source"),

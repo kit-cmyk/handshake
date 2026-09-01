@@ -50,6 +50,19 @@ here rather than leaving "Coming soon"/placeholder UI in the app.
 
 ## Find leads / prospecting
 
+- [ ] **Harden the LinkedIn backfill's search tier** — the background job
+  (`src/lib/inngest/functions.ts` → `linkedinBackfill`) crawls the prospect's own
+  site first, then falls back to a web search. With no `WEB_SEARCH_API_KEY` that
+  fallback scrapes DuckDuckGo's HTML endpoint, which can be throttled or blocked
+  and whose markup can change without notice (parser in
+  `src/lib/enrichment/web-search.ts`). Before relying on it at volume, put a real
+  search API behind it (Brave is already wired) or set
+  `LINKEDIN_LOOKUP_SEARCH=off` and accept site-crawl-only coverage.
+- [ ] **Surface backfill outcomes in the UI** — the job stamps
+  `linkedin_lookup_at` on every attempt and silently fills `linkedin_url` when it
+  finds one. There's no view of "looked up, found nothing", so a user can't tell
+  a not-yet-checked record from a checked-and-missing one. A column or filter on
+  Companies/Contacts would make that visible.
 - [ ] **People / demographic lead search** — the Find leads page currently
   searches *businesses* only (Google Places: category, location, radius,
   rating, has-website/phone, open-now). Person-level conditions (age, gender,

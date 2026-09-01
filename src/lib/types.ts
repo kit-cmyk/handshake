@@ -48,6 +48,8 @@ export type Company = {
   employee_count: number | null;
   annual_revenue: number | null;
   linkedin_url: string | null;
+  /** Last background LinkedIn lookup ATTEMPT (hit or miss); null = never tried. */
+  linkedin_lookup_at: string | null;
   domain: string | null;
   phone: string | null;
   website: string | null;
@@ -73,6 +75,9 @@ export type Contact = {
   email: string | null;
   phone: string | null;
   title: string | null;
+  linkedin_url: string | null;
+  /** Last background LinkedIn lookup ATTEMPT (hit or miss); null = never tried. */
+  linkedin_lookup_at: string | null;
   lifecycle_stage: LifecycleStage;
   owner_id: string | null;
   source: string | null;

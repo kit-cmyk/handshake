@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/lib/context";
+import { inngest } from "@/lib/inngest/client";
 import {
   getPlacesProvider,
   isPlacesConfigured,
   applyFilters,
   type LatLng,
 } from "@/lib/places/provider";
-import { discoverEmail } from "@/lib/places/enrich";
+import { discoverSiteContact } from "@/lib/places/enrich";
 import {
   getContactsProvider,
   applyContactFilters,
@@ -33,6 +34,7 @@ export type LeadResult = {
   lat: number | null;
   lng: number | null;
   email: string | null;
+  linkedinUrl: string | null;
   /** Already in the CRM (matched by place id) — not importable again. */
   existing: boolean;
 };
@@ -54,6 +56,8 @@ export type ImportState = {
   imported?: number;
   contacts?: number;
   skipped?: number;
+  /** Imported without a LinkedIn URL — queued for the background backfill. */
+  linkedinPending?: number;
 };
 
 /**
@@ -78,6 +82,7 @@ export async function searchLeads(
   const hasWebsite = fd.get("has_website") === "on";
   const hasPhone = fd.get("has_phone") === "on";
   const hasEmail = fd.get("has_email") === "on";
+  const hasLinkedin = fd.get("has_linkedin") === "on";
   const openNow = fd.get("open_now") === "on";
 
   if (!category || !location)
@@ -120,16 +125,21 @@ export async function searchLeads(
 
     let candidates = applyFilters(results, { minRating, hasWebsite, hasPhone });
 
-    // Discover emails up front (search-time) when requested, so the review list
-    // can show them and importing needs no extra fetches.
+    // Discover emails and LinkedIn pages up front (search-time) when requested,
+    // so the review list can show them and importing needs no extra fetches.
+    // Both come from the same page fetch — the fetch is the expensive part.
     const emailByPlace = new Map<string, string>();
-    if (enrich || hasEmail) {
+    const linkedinByPlace = new Map<string, string>();
+    if (enrich || hasEmail || hasLinkedin) {
       for (const r of candidates.filter((r) => r.website).slice(0, ENRICH_CAP)) {
-        const email = await discoverEmail(r.website);
+        const { email, linkedinUrl } = await discoverSiteContact(r.website);
         if (email) emailByPlace.set(r.placeId, email);
+        if (linkedinUrl) linkedinByPlace.set(r.placeId, linkedinUrl);
       }
       if (hasEmail)
         candidates = candidates.filter((r) => emailByPlace.has(r.placeId));
+      if (hasLinkedin)
+        candidates = candidates.filter((r) => linkedinByPlace.has(r.placeId));
     }
 
     // Flag results already in the CRM.
@@ -158,6 +168,7 @@ export async function searchLeads(
       lat: r.latitude,
       lng: r.longitude,
       email: emailByPlace.get(r.placeId) ?? null,
+      linkedinUrl: linkedinByPlace.get(r.placeId) ?? null,
       existing: existingIds.has(r.placeId),
     }));
 
@@ -198,6 +209,37 @@ export async function searchLeads(
     }
     revalidatePath("/leads");
     return { error: message };
+  }
+}
+
+/**
+ * Hand any record that still has no LinkedIn URL to the background backfill.
+ *
+ * Search-time enrichment only reads a company's homepage and the people
+ * providers only return a profile when they already have one, so a good share
+ * of every import arrives without a LinkedIn. The deeper crawl+search is far
+ * too slow to run while the user waits on the import click, so it happens out
+ * of band and the row updates when it lands.
+ *
+ * Never lets a queueing failure fail the import — the records are saved either
+ * way, and the nightly sweep will pick them up.
+ */
+async function queueLinkedinBackfill(
+  orgId: string,
+  kind: "companies" | "contacts",
+  rows: { id: string; linkedin_url: string | null }[]
+): Promise<number> {
+  const ids = rows.filter((r) => !r.linkedin_url).map((r) => r.id);
+  if (!ids.length) return 0;
+  try {
+    await inngest.send({
+      name: "enrichment/linkedin.backfill",
+      data: { orgId, kind, ids },
+    });
+    return ids.length;
+  } catch {
+    // Queued work is best-effort; the sweep is the safety net.
+    return 0;
   }
 }
 
@@ -245,14 +287,21 @@ export async function importLeads(
         region: r.region,
         postal_code: r.postalCode,
         google_place_id: r.placeId,
+        linkedin_url: r.linkedinUrl,
         rating: r.rating,
         latitude: r.lat,
         longitude: r.lng,
         source: "google_places",
       }))
     )
-    .select("id, google_place_id");
+    .select("id, google_place_id, linkedin_url");
   if (error) return { error: error.message };
+
+  const linkedinPending = await queueLinkedinBackfill(
+    org.id,
+    "companies",
+    (inserted ?? []) as { id: string; linkedin_url: string | null }[]
+  );
 
   // Create a contact for any selected business we already found an email for.
   const emailByPlace = new Map(
@@ -295,7 +344,7 @@ export async function importLeads(
   revalidatePath("/leads");
   if (contacts) revalidatePath("/contacts");
 
-  return { ok: true, imported, contacts, skipped };
+  return { ok: true, imported, contacts, skipped, linkedinPending };
 }
 
 // ---- People / contact search ------------------------------------------------
@@ -330,6 +379,8 @@ export type ContactImportState = {
   imported?: number;
   linked?: number;
   skipped?: number;
+  /** Imported without a LinkedIn URL — queued for the background backfill. */
+  linkedinPending?: number;
 };
 
 /**
@@ -350,6 +401,7 @@ export async function searchContacts(
   const department = String(fd.get("department") ?? "").trim();
   const limit = Math.min(Math.max(Number(fd.get("limit")) || 20, 1), 60);
   const hasEmail = fd.get("has_email") === "on";
+  const hasLinkedin = fd.get("has_linkedin") === "on";
 
   if (!title) return { error: "Enter a role or job title to search for." };
 
@@ -379,9 +431,10 @@ export async function searchContacts(
       department: department || undefined,
       limit,
       hasEmail,
+      hasLinkedin,
     });
 
-    const candidates = applyContactFilters(results, { hasEmail });
+    const candidates = applyContactFilters(results, { hasEmail, hasLinkedin });
 
     // Flag people already in the CRM (matched by email).
     const emails = candidates
@@ -512,8 +565,14 @@ export async function importContacts(
   const { data: inserted, error } = await supabase
     .from("contacts")
     .insert(rows)
-    .select("id, company_id");
+    .select("id, company_id, linkedin_url");
   if (error) return { error: error.message };
+
+  const linkedinPending = await queueLinkedinBackfill(
+    org.id,
+    "contacts",
+    (inserted ?? []) as { id: string; linkedin_url: string | null }[]
+  );
 
   const imported = inserted?.length ?? 0;
   const linked = (inserted ?? []).filter(
@@ -530,5 +589,5 @@ export async function importContacts(
   revalidatePath("/contacts");
   revalidatePath("/leads");
 
-  return { ok: true, imported, linked, skipped };
+  return { ok: true, imported, linked, skipped, linkedinPending };
 }

@@ -4,6 +4,8 @@
 // (deterministic sample people, works offline). If PEOPLE_SEARCH_API_KEY is set,
 // a real people-search provider is used instead.
 
+import { normalizeLinkedIn } from "@/lib/linkedin";
+
 export type ContactQuery = {
   /** Role/title to search for, e.g. "VP Sales", "Owner". Required. */
   title: string;
@@ -16,6 +18,8 @@ export type ContactQuery = {
   limit: number;
   /** Only return people we have an email for. */
   hasEmail?: boolean;
+  /** Only return people we have a LinkedIn profile for. */
+  hasLinkedin?: boolean;
 };
 
 export type ContactResult = {
@@ -210,7 +214,7 @@ class ApolloContactsProvider implements ContactsProvider {
         domain: org?.primary_domain ?? null,
         city: p.city ?? null,
         region: p.state ?? null,
-        linkedinUrl: p.linkedin_url ?? null,
+        linkedinUrl: normalizeLinkedIn(p.linkedin_url),
       };
     });
   }
@@ -225,6 +229,7 @@ export function getContactsProvider(): ContactsProvider {
 
 export type ContactFilters = {
   hasEmail?: boolean;
+  hasLinkedin?: boolean;
 };
 
 /** Apply condition filters the provider can't express natively. */
@@ -234,6 +239,7 @@ export function applyContactFilters(
 ): ContactResult[] {
   return results.filter((r) => {
     if (f.hasEmail && !r.email) return false;
+    if (f.hasLinkedin && !r.linkedinUrl) return false;
     return true;
   });
 }
@@ -282,6 +288,7 @@ export function contactPayload(
     phone: r.phone,
     city: r.city,
     region: r.region,
+    linkedin_url: r.linkedinUrl,
     owner_id: ownerId,
     lifecycle_stage: "new" as const,
     source: "people_search",
