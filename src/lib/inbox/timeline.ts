@@ -16,8 +16,9 @@ export type TimelineEvent = {
 /**
  * Event types worth showing in the timeline as system lines. `replied` is
  * intentionally excluded — the reply body now renders as an inbound message
- * bubble, so a system line would duplicate it. One-off inbox sends are stored
- * as message bubbles (no `sent` event), so `sent` here means a campaign send.
+ * bubble, so a system line would duplicate it. `sent` is kept because campaign
+ * and workflow sends still record one for the funnel, but buildTimeline drops
+ * the line whenever the matching message bubble is present.
  */
 export const TIMELINE_EVENT_TYPES = [
   "sent",
@@ -26,6 +27,33 @@ export const TIMELINE_EVENT_TYPES = [
   "bounced",
   "stage_moved",
 ] as const;
+
+/**
+ * Drop the `sent` system line for any send that also has a message bubble.
+ *
+ * An automated send records both: a `sent` event (which the campaign funnel
+ * counts) and a message row (which the thread renders). They correlate on the
+ * provider's own id — `messages.provider_message_id` against the event's
+ * `metadata.message_id` — so the pair collapses to the bubble. Sends from
+ * before the engines recorded messages have no bubble to collapse into and keep
+ * their line, which is why this filters rather than dropping `sent` outright.
+ */
+function withoutDuplicateSends(
+  events: TimelineEvent[],
+  messages: Message[]
+): TimelineEvent[] {
+  const delivered = new Set(
+    messages
+      .map((m) => m.provider_message_id)
+      .filter((id): id is string => !!id)
+  );
+  if (!delivered.size) return events;
+  return events.filter((e) => {
+    if (e.type !== "sent") return true;
+    const id = e.metadata?.message_id;
+    return !(typeof id === "string" && delivered.has(id));
+  });
+}
 
 export function buildTimeline(input: {
   messages: Message[];
@@ -39,7 +67,7 @@ export function buildTimeline(input: {
     ...input.activities.map(
       (a): TimelineEntry => ({ kind: "activity", at: a.created_at, activity: a })
     ),
-    ...input.events.map(
+    ...withoutDuplicateSends(input.events, input.messages).map(
       (e): TimelineEntry => ({
         kind: "event",
         at: e.occurred_at,

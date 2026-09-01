@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { buildTimeline, eventLabel, TIMELINE_EVENT_TYPES } from "./timeline";
 import type { Activity, Message } from "@/lib/types";
 
-function msg(id: string, at: string, direction: "inbound" | "outbound"): Message {
+function msg(
+  id: string,
+  at: string,
+  direction: "inbound" | "outbound",
+  providerMessageId: string | null = null
+): Message {
   return {
     id,
     org_id: "o1",
@@ -19,10 +24,11 @@ function msg(id: string, at: string, direction: "inbound" | "outbound"): Message
     body_text: null,
     snippet: null,
     user_id: null,
-    provider_message_id: null,
+    provider_message_id: providerMessageId,
     message_id: null,
     in_reply_to: null,
     campaign_id: null,
+    workflow_id: null,
     created_at: at,
   };
 }
@@ -80,6 +86,54 @@ describe("buildTimeline", () => {
 
   it("handles all-empty input", () => {
     expect(buildTimeline({ messages: [], activities: [], events: [] })).toEqual([]);
+  });
+
+  it("collapses a 'sent' event into the message bubble it produced", () => {
+    const timeline = buildTimeline({
+      messages: [msg("m1", "2026-01-01T10:00:00Z", "outbound", "prov-1")],
+      activities: [],
+      events: [
+        {
+          id: "e1",
+          type: "sent",
+          metadata: { message_id: "prov-1" },
+          occurred_at: "2026-01-01T10:00:00Z",
+        },
+      ],
+    });
+    expect(timeline.map((t) => t.kind)).toEqual(["message"]);
+  });
+
+  it("keeps a 'sent' event that has no message row (sent before bubbles)", () => {
+    const timeline = buildTimeline({
+      messages: [msg("m1", "2026-01-01T10:00:00Z", "outbound", "prov-1")],
+      activities: [],
+      events: [
+        {
+          id: "e1",
+          type: "sent",
+          metadata: { message_id: "prov-other" },
+          occurred_at: "2026-01-01T09:00:00Z",
+        },
+      ],
+    });
+    expect(timeline.map((t) => t.kind)).toEqual(["event", "message"]);
+  });
+
+  it("never collapses a non-'sent' event that shares a provider id", () => {
+    const timeline = buildTimeline({
+      messages: [msg("m1", "2026-01-01T10:00:00Z", "outbound", "prov-1")],
+      activities: [],
+      events: [
+        {
+          id: "e1",
+          type: "opened",
+          metadata: { message_id: "prov-1" },
+          occurred_at: "2026-01-01T11:00:00Z",
+        },
+      ],
+    });
+    expect(timeline.map((t) => t.kind)).toEqual(["message", "event"]);
   });
 });
 

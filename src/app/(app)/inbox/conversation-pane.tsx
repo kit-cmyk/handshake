@@ -241,6 +241,9 @@ function TimelineRow({
       ? people[m.user_id]
       : null
     : null;
+  // An automated send has no user behind it, so "You" would be a lie — name the
+  // engine that sent it instead.
+  const automated = m.campaign_id ? "Campaign" : m.workflow_id ? "Workflow" : null;
 
   return (
     <div className={cn("flex gap-2.5", outbound && "flex-row-reverse")}>
@@ -289,7 +292,8 @@ function TimelineRow({
           )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {outbound ? sender?.name ?? "You" : "Contact"} · {fmtTime(m.created_at)}
+          {outbound ? sender?.name ?? automated ?? "You" : "Contact"} ·{" "}
+          {fmtTime(m.created_at)}
         </p>
       </div>
     </div>

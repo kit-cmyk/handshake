@@ -7,6 +7,7 @@ import {
   Megaphone,
   Workflow,
   ArrowRightLeft,
+  AtSign,
 } from "lucide-react";
 import type { DealTimelineItem } from "./actions";
 import type { ActivityType } from "@/lib/types";
@@ -20,6 +21,7 @@ const ACTIVITY_ICON: Record<ActivityType, typeof StickyNote> = {
 };
 
 const KIND_ICON = {
+  message: AtSign,
   campaign: Megaphone,
   workflow: Workflow,
   stage: ArrowRightLeft,
@@ -32,7 +34,10 @@ function iconFor(item: DealTimelineItem) {
   return StickyNote;
 }
 
-/** Read-only chronological log: activity, campaigns, workflows, pipeline moves. */
+/**
+ * Read-only chronological log: activity, Inbox email, campaigns, workflows and
+ * pipeline moves.
+ */
 export function DealTimeline({ items }: { items: DealTimelineItem[] }) {
   if (!items.length) {
     return (
